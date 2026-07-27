@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Volumes - ops-dras{% endblock %}
+{% block content %}
+<h1>Cinder Volumes</h1>
+<p class="muted">Pick a cluster to browse its volumes. Backing up a volume uses that cluster as the source.</p>
+
+{% if not clusters %}
+  <div class="flash flash-error">No clusters configured yet. Go to <a href="{{ url_for('clusters.list_clusters') }}">Clusters</a> to add one.</div>
+{% else %}
+<form method="get" class="cluster-picker">
+  <label for="cluster_id">Cluster</label>
+  <select name="cluster_id" id="cluster_id" onchange="this.form.submit()">
+    <option value="">Select a cluster&hellip;</option>
+    {% for c in clusters %}
+      <option value="{{ c.id }}" {{ 'selected' if selected_cluster and selected_cluster.id == c.id else '' }}>{{ c.name }}</option>
+    {% endfor %}
+  </select>
+  <noscript><button type="submit" class="btn btn-secondary">Go</button></noscript>
+</form>
+
+{% if error %}
+  <div class="flash flash-error">{{ error }}</div>
+{% elif selected_cluster and not volumes %}
+  <p class="muted">No volumes found on {{ selected_cluster.name }}.</p>
+{% elif selected_cluster %}
+<div class="table-scroll">
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>ID</th>
+      <th>Size (GiB)</th>
+      <th>Status</th>
+      <th>Bootable</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for v in volumes %}
+    <tr>
+      <td>{{ v.name or '(unnamed)' }}</td>
+      <td><code title="{{ v.id }}">{{ v.id[:8] }}&hellip;</code></td>
+      <td>{{ v.size }}</td>
+      <td><span class="badge badge-{{ v.status }}">{{ v.status }}</span></td>
+      <td>{{ v.bootable }}</td>
+      <td>
+        <form method="post" action="{{ url_for('volumes.backup_volume') }}">
+          <input type="hidden" name="cluster_id" value="{{ selected_cluster.id }}">
+          <input type="hidden" name="volume_id" value="{{ v.id }}">
+          <input type="hidden" name="volume_name" value="{{ v.name or v.id }}">
+          <button type="submit" class="btn btn-primary">Backup</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

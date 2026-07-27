@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Backups &amp; Restores - ops-dras{% endblock %}
+{% block content %}
+<h1>Backup &amp; Restore Tasks</h1>
+<p class="muted">Backups run on the source cluster. Restoring exports the backup record from the source, imports it on whichever cluster you pick as destination, then triggers the restore there.</p>
+
+{% if not tasks %}
+<p class="muted empty-state">No backup or restore tasks yet — trigger a backup from the Volumes page to get started.</p>
+{% else %}
+<div class="task-list" id="tasks-table">
+  {% for t in tasks %}
+  {% set in_progress = t.status in ('pending', 'running') %}
+  <article class="task-card" data-task-id="{{ t.id }}">
+    <div class="task-card-top">
+      <span class="badge badge-type">{{ t.task_type }}</span>
+      <span class="task-volume">{{ t.volume_name or t.volume_id or 'volume' }}</span>
+      <span class="task-status"><span class="badge badge-{{ t.status }}">{{ t.status }}</span></span>
+      <span class="task-updated muted" title="Last updated">{{ t.updated_at }}</span>
+      <form method="post" action="{{ url_for('backups.delete_task', task_id=t.id) }}" class="task-delete-form">
+        <button type="submit" class="btn btn-danger btn-xs" {{ 'disabled' if in_progress else '' }}
+                aria-label="Delete task #{{ t.id }} from history"
+                title="{{ 'Wait for the task to finish before deleting' if in_progress else 'Remove this task from history (does not touch the real cluster)' }}"
+                onclick="return confirm('Remove task #{{ t.id }} from history?\n\nThis only clears the record in ops-dras — it does not delete any real backup or volume on the OpenStack cluster.');">
+          Delete
+        </button>
+      </form>
+    </div>
+
+    <div class="task-card-meta">
+      <span class="task-route">
+        {{ t.source_cluster_name or 'unknown cluster' }}
+        {% if t.task_type == 'restore' or t.dest_cluster_name %}<span class="task-route-arrow">&rarr;</span> {{ t.dest_cluster_name or 'unknown cluster' }}{% endif %}
+      </span>
+      {% if t.source_backup_id %}
+      <span class="task-id-chip" title="Source backup ID: {{ t.source_backup_id }}">src <code>{{ t.source_backup_id[:8] }}&hellip;</code></span>
+      {% endif %}
+      {% if t.dest_backup_id %}
+      <span class="task-id-chip" title="Destination backup ID: {{ t.dest_backup_id }}">dst <code>{{ t.dest_backup_id[:8] }}&hellip;</code></span>
+      {% endif %}
+    </div>
+
+    {% if t.message %}
+    <p class="task-message muted" title="{{ t.message }}">{{ t.message }}</p>
+    {% else %}
+    <p class="task-message muted"></p>
+    {% endif %}
+
+    {% if t.task_type == 'backup' %}
+    <form method="post" action="{{ url_for('backups.restore_backup', task_id=t.id) }}" class="restore-form">
+      <select name="dest_cluster_id" class="restore-cluster-select" aria-label="Restore to cluster"
+              {{ 'disabled' if t.status != 'success' else '' }} required>
+        <option value="">Restore to&hellip;</option>
+        {% for c in clusters %}
+          <option value="{{ c.id }}">{{ c.name }}</option>
+        {% endfor %}
+      </select>
+      <select name="dest_volume_id" class="restore-volume-select" aria-label="Restore into volume" disabled>
+        <option value="">Create a New Volume</option>
+      </select>
+      <button type="submit" class="btn btn-secondary" {{ 'disabled' if t.status != 'success' else '' }}>
+        Restore
+      </button>
+    </form>
+    {% endif %}
+  </article>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/tasks.js') }}"></script>
+<script>
+  // "Select Volume" picker for the destination cluster, same idea as
+  // Horizon's Restore Volume Backup dialog: default to creating a new
+  // volume, or fetch the destination cluster's existing volumes to restore
+  // into one of them instead.
+  document.querySelectorAll(".restore-cluster-select").forEach((clusterSelect) => {
+    clusterSelect.addEventListener("change", async () => {
+      const form = clusterSelect.closest("form");
+      const volumeSelect = form.querySelector(".restore-volume-select");
+      volumeSelect.innerHTML = '<option value="">Create a New Volume</option>';
+      volumeSelect.disabled = true;
+
+      const clusterId = clusterSelect.value;
+      if (!clusterId) return;
+
+      try {
+        const resp = await fetch(`/api/clusters/${clusterId}/volumes`);
+        if (resp.ok) {
+          const volumes = await resp.json();
+          volumes.forEach((v) => {
+            const opt = document.createElement("option");
+            opt.value = v.id;
+            opt.textContent = `${v.name} (${v.size} GiB, ${v.status})`;
+            volumeSelect.appendChild(opt);
+          });
+        }
+      } catch (err) {
+        // network hiccup: leave "Create a New Volume" as the only option
+      } finally {
+        volumeSelect.disabled = false;
+      }
+    });
+  });
+</script>
+{% endblock %}
