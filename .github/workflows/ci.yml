@@ -18,6 +18,8 @@ jobs:
       - run: pytest -q
         env:
           DATABASE_URL: sqlite:////tmp/ops-dras-ci.sqlite3
-      - run: docker compose config
-        env:
-          POSTGRES_PASSWORD: ci-only-password
+      - name: Validate Docker Compose configuration
+        run: |
+          cp .env.example .env
+          trap 'rm -f .env' EXIT
+          docker compose config -q
