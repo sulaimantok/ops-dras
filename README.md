@@ -23,6 +23,26 @@ wsgi.py          # Gunicorn/Flask entrypoint
 Runtime data such as `.env`, PostgreSQL backups, local databases, caches, and
 OpenTofu deployment state are intentionally excluded from the repository.
 
+## Versioning and releases
+
+ops-dras uses Semantic Versioning (`MAJOR.MINOR.PATCH`) and Conventional
+Commits. Release Please runs on pushes to `main` and opens a Release PR that
+updates `CHANGELOG.md`, the version in `app/version.py`, and the release
+manifest. Merging that PR creates an annotated `vX.Y.Z` GitHub Release/tag.
+
+Examples:
+
+```text
+fix: handle expired Keystone token       → PATCH release
+feat: add cluster health dashboard        → MINOR release
+feat!: change task API response           → MAJOR release
+```
+
+The published release workflow builds multi-architecture images and pushes
+them to `ghcr.io/<owner>/<repository>` with SemVer, commit-SHA, and (for a
+stable release) `latest` tags. Alembic revisions are database schema versions
+and are intentionally independent from application versions.
+
 ## 1. About the Application
 
 **ops-dras** (OpenStack Disaster Recovery as a Service) is a web app for

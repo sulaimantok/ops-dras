@@ -3,8 +3,11 @@ from tests.conftest import csrf_token
 
 
 def test_health_and_readiness_are_public(client):
-    assert client.get("/healthz").get_json() == {"status": "ok"}
-    assert client.get("/readyz").get_json()["database"] == "ok"
+    health = client.get("/healthz").get_json()
+    assert health == {"status": "ok", "version": "0.1.0"}
+    readiness = client.get("/readyz").get_json()
+    assert readiness["database"] == "ok"
+    assert readiness["version"] == "0.1.0"
 
 
 def test_authenticated_pages_render(client):

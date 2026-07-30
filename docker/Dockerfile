@@ -17,6 +17,6 @@ EXPOSE 8080
 
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
 
-# gthread workers so the ThreadPoolExecutor used for background Cinder
-# backup/restore orchestration and Flask request handling can run concurrently.
+# gthread workers keep concurrent HTTP requests responsive. Long-running
+# backup/restore operations execute in the separate persistent queue worker.
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--threads", "4", "--worker-class", "gthread", "--timeout", "120", "wsgi:app"]

@@ -5,6 +5,7 @@ from flask import Flask
 from config import Config
 from app import db as db_module
 from app.security.csrf import protect as csrf_protect, token as csrf_token
+from app.version import __version__
 
 
 def create_app(config_object=Config):
@@ -21,7 +22,7 @@ def create_app(config_object=Config):
     db_module.init_db(app)
 
     app.before_request(csrf_protect)
-    app.context_processor(lambda: {"csrf_token": csrf_token})
+    app.context_processor(lambda: {"csrf_token": csrf_token, "app_version": __version__})
 
     from app.routes.auth import bp as auth_bp
     from app.routes.volumes import bp as volumes_bp

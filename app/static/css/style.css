@@ -73,6 +73,7 @@ summary:focus-visible {
 .user { color: var(--muted); font-size: 0.9rem; }
 
 .container { max-width: 1100px; margin: 0 auto; padding: 28px; }
+.site-footer { max-width: 1100px; margin: 0 auto; padding: 12px 28px 24px; color: var(--muted); font-size: 0.75rem; text-align: right; }
 
 h1 { margin-top: 0; }
 .muted { color: var(--muted); }

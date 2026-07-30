@@ -38,6 +38,8 @@
     {% block content %}{% endblock %}
   </main>
 
+  <footer class="site-footer">ops-dras v{{ app_version }}</footer>
+
   <script src="{{ url_for('static', filename='js/forms.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>

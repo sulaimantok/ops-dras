@@ -3,13 +3,14 @@ from flask import Blueprint, jsonify, current_app, request, session
 from app import db
 from app.security.auth import login_required, roles_required
 from app.services.openstack import OpenStackClient, OpenStackError
+from app.version import __version__
 
 bp = Blueprint("api", __name__)
 
 
 @bp.route("/healthz")
 def health():
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "ok", "version": __version__})
 
 
 @bp.route("/readyz")
@@ -19,7 +20,7 @@ def readiness():
     except Exception:  # noqa: BLE001
         current_app.logger.exception("readiness database check failed")
         return jsonify({"status": "not_ready", "database": "unavailable"}), 503
-    return jsonify({"status": "ready", "database": "ok"})
+    return jsonify({"status": "ready", "database": "ok", "version": __version__})
 
 
 @bp.route("/api/audit-logs")
