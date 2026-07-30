@@ -16,6 +16,7 @@ venv/
 .coverage
 coverage.xml
 htmlcov/
+deploy/
 
 # OpenTofu/Terraform runtime data; keep source .tf files and lock files.
 **/.terraform/
