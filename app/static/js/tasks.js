@@ -22,6 +22,8 @@
       if (statusCell) {
         statusCell.innerHTML = `<span class="badge badge-${t.status}">${t.status}</span>`;
       }
+      const stageBadge = card.querySelector(".badge-stage");
+      if (stageBadge) stageBadge.textContent = t.stage || t.status;
       const messageCell = card.querySelector(".task-message");
       if (messageCell) {
         messageCell.textContent = t.message || "";
@@ -30,7 +32,7 @@
 
       const restoreForm = card.querySelector('form[action*="restore"]');
       if (restoreForm) {
-        const enabled = t.status === "success";
+        const enabled = t.status === "succeeded";
         restoreForm.querySelectorAll("button, select").forEach((el) => {
           el.disabled = !enabled;
         });
@@ -38,7 +40,7 @@
 
       const deleteBtn = card.querySelector(".task-delete-form button");
       if (deleteBtn) {
-        deleteBtn.disabled = t.status === "pending" || t.status === "running";
+        deleteBtn.disabled = t.status === "queued" || t.status === "running";
       }
     });
   }

@@ -4,26 +4,36 @@
 <h1>Backup &amp; Restore Tasks</h1>
 <p class="muted">Backups run on the source cluster. Restoring exports the backup record from the source, imports it on whichever cluster you pick as destination, then triggers the restore there.</p>
 
+<form method="get" class="filter-bar" aria-label="Task filters">
+  <input type="search" name="q" value="{{ filters.q }}" placeholder="Search volume or message" aria-label="Search tasks">
+  <select name="type" aria-label="Task type"><option value="">All types</option><option value="backup" {{ 'selected' if filters.type == 'backup' else '' }}>Backup</option><option value="restore" {{ 'selected' if filters.type == 'restore' else '' }}>Restore</option></select>
+  <select name="status" aria-label="Task status"><option value="">All statuses</option>{% for value in ('queued','running','succeeded','failed','cancelled') %}<option value="{{ value }}" {{ 'selected' if filters.status == value else '' }}>{{ value }}</option>{% endfor %}</select>
+  <button class="btn btn-secondary" type="submit">Filter</button><a class="btn btn-secondary" href="{{ url_for('backups.list_backups') }}">Reset</a>
+</form>
+<p class="muted small">{{ total }} matching task{{ '' if total == 1 else 's' }}</p>
+
 {% if not tasks %}
 <p class="muted empty-state">No backup or restore tasks yet — trigger a backup from the Volumes page to get started.</p>
 {% else %}
 <div class="task-list" id="tasks-table">
   {% for t in tasks %}
-  {% set in_progress = t.status in ('pending', 'running') %}
+  {% set in_progress = t.status in ('queued', 'running') %}
   <article class="task-card" data-task-id="{{ t.id }}">
     <div class="task-card-top">
       <span class="badge badge-type">{{ t.task_type }}</span>
       <span class="task-volume">{{ t.volume_name or t.volume_id or 'volume' }}</span>
       <span class="task-status"><span class="badge badge-{{ t.status }}">{{ t.status }}</span></span>
+      <span class="badge badge-stage">{{ t.stage }}</span>
       <span class="task-updated muted" title="Last updated">{{ t.updated_at }}</span>
-      <form method="post" action="{{ url_for('backups.delete_task', task_id=t.id) }}" class="task-delete-form">
+      {% if session.get('role') == 'admin' %}<form method="post" action="{{ url_for('backups.delete_task', task_id=t.id) }}" class="task-delete-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-danger btn-xs" {{ 'disabled' if in_progress else '' }}
                 aria-label="Delete task #{{ t.id }} from history"
                 title="{{ 'Wait for the task to finish before deleting' if in_progress else 'Remove this task from history (does not touch the real cluster)' }}"
                 onclick="return confirm('Remove task #{{ t.id }} from history?\n\nThis only clears the record in ops-dras — it does not delete any real backup or volume on the OpenStack cluster.');">
           Delete
         </button>
-      </form>
+      </form>{% endif %}
     </div>
 
     <div class="task-card-meta">
@@ -45,10 +55,28 @@
     <p class="task-message muted"></p>
     {% endif %}
 
-    {% if t.task_type == 'backup' %}
+    <details class="task-detail">
+      <summary>Task details and timeline</summary>
+      <dl class="task-detail-grid">
+        <div><dt>Queued</dt><dd>{{ t.created_at }}</dd></div>
+        <div><dt>Started</dt><dd>{{ t.started_at or 'Not started' }}</dd></div>
+        <div><dt>Finished</dt><dd>{{ t.finished_at or 'In progress' }}</dd></div>
+        <div><dt>Attempts</dt><dd>{{ t.attempts }} / {{ t.max_attempts }}</dd></div>
+      </dl>
+      {% if t.error_code %}<div class="task-error" role="alert"><strong>{{ t.error_code }}</strong><p>{{ t.error_detail }}</p></div>{% endif %}
+    </details>
+
+    {% if t.status == 'queued' and session.get('role') in ('admin', 'operator') %}
+    <form method="post" action="{{ url_for('backups.cancel_task', task_id=t.id) }}" class="inline-action">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-danger btn-xs" type="submit">Cancel queued task</button>
+    </form>
+    {% endif %}
+
+    {% if t.task_type == 'backup' and session.get('role') in ('admin', 'operator') %}
     <form method="post" action="{{ url_for('backups.restore_backup', task_id=t.id) }}" class="restore-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <select name="dest_cluster_id" class="restore-cluster-select" aria-label="Restore to cluster"
-              {{ 'disabled' if t.status != 'success' else '' }} required>
+              {{ 'disabled' if t.status != 'succeeded' else '' }} required>
         <option value="">Restore to&hellip;</option>
         {% for c in clusters %}
           <option value="{{ c.id }}">{{ c.name }}</option>
@@ -57,7 +85,7 @@
       <select name="dest_volume_id" class="restore-volume-select" aria-label="Restore into volume" disabled>
         <option value="">Create a New Volume</option>
       </select>
-      <button type="submit" class="btn btn-secondary" {{ 'disabled' if t.status != 'success' else '' }}>
+      <button type="submit" class="btn btn-secondary" {{ 'disabled' if t.status != 'succeeded' else '' }}>
         Restore
       </button>
     </form>
@@ -65,6 +93,11 @@
   </article>
   {% endfor %}
 </div>
+{% if pages > 1 %}<nav class="pagination" aria-label="Task pages">
+  {% if page > 1 %}<a class="btn btn-secondary" href="{{ url_for('backups.list_backups', page=page-1, **filters) }}">Previous</a>{% endif %}
+  <span>Page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<a class="btn btn-secondary" href="{{ url_for('backups.list_backups', page=page+1, **filters) }}">Next</a>{% endif %}
+</nav>{% endif %}
 {% endif %}
 {% endblock %}
 {% block scripts %}

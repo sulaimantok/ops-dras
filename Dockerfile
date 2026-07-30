@@ -11,8 +11,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 RUN mkdir -p /app/data
+RUN chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 8080
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # gthread workers so the ThreadPoolExecutor used for background Cinder
 # backup/restore orchestration and Flask request handling can run concurrently.

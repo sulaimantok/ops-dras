@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - ops-dras{% endblock %}
+{% block content %}
+<div class="page-header"><div><h1>Operations Dashboard</h1><p class="muted">Current state of clusters and disaster-recovery jobs.</p></div></div>
+<section class="stats-grid" aria-label="Operational summary">
+  <article class="stat-card"><span class="stat-label">Clusters</span><strong>{{ stats.clusters }}</strong></article>
+  <article class="stat-card"><span class="stat-label">Active tasks</span><strong>{{ stats.statuses.get('queued', 0) + stats.statuses.get('running', 0) }}</strong></article>
+  <article class="stat-card"><span class="stat-label">Succeeded</span><strong>{{ stats.statuses.get('succeeded', 0) }}</strong></article>
+  <article class="stat-card"><span class="stat-label">Failed</span><strong>{{ stats.statuses.get('failed', 0) }}</strong></article>
+</section>
+
+<div class="section-heading"><h2>Recent tasks</h2><a href="{{ url_for('backups.list_backups') }}">View all</a></div>
+{% if recent_tasks %}
+<div class="table-scroll"><table class="data-table">
+  <thead><tr><th>Task</th><th>Volume</th><th>Route</th><th>Stage</th><th>Updated</th></tr></thead>
+  <tbody>{% for t in recent_tasks %}<tr>
+    <td>#{{ t.id }} · {{ t.task_type }}</td><td>{{ t.volume_name or t.volume_id or '—' }}</td>
+    <td>{{ t.source_cluster_name or '—' }}{% if t.dest_cluster_name %} → {{ t.dest_cluster_name }}{% endif %}</td>
+    <td><span class="badge badge-{{ t.status }}">{{ t.stage }}</span></td><td>{{ t.updated_at }}</td>
+  </tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<p class="muted empty-state">No tasks have been created.</p>{% endif %}
+{% if stats.last_restore %}<p class="muted last-restore">Last restore: task #{{ stats.last_restore.id }}, {{ stats.last_restore.status }} at {{ stats.last_restore.updated_at }}.</p>{% endif %}
+{% endblock %}

@@ -3,6 +3,7 @@
 {% block content %}
 <div class="login-wrap">
   <form class="login-card" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <h1>ops-dras</h1>
     <p class="subtitle">Disaster Recovery as a Service for OpenStack</p>
 

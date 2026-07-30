@@ -1,7 +1,30 @@
 __pycache__/
 *.pyc
 .env
-data/*.sqlite3
+.env.*
+!.env.example
+data/
+backups/
+*.sqlite
+*.sqlite3
+*.db
 .DS_Store
 venv/
-deploy/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# OpenTofu/Terraform runtime data; keep source .tf files and lock files.
+**/.terraform/
+**/terraform.tfstate
+**/terraform.tfstate.*
+*.tfvars
+*.tfplan
+
+# Local certificates and private keys must never be committed.
+*.pem
+*.key
+*.crt

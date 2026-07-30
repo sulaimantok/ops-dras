@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, session, current_app, request
 
-from app import db, tasks
-from app.auth_utils import login_required
+from app import db
+from app.auth_utils import login_required, roles_required
 from app.openstack_client import OpenStackClient, OpenStackError
 
 bp = Blueprint("volumes", __name__)
@@ -10,7 +10,7 @@ bp = Blueprint("volumes", __name__)
 @bp.route("/")
 @login_required
 def index():
-    return redirect(url_for("volumes.list_volumes"))
+    return redirect(url_for("dashboard.index"))
 
 
 @bp.route("/volumes")
@@ -45,7 +45,7 @@ def list_volumes():
 
 
 @bp.route("/volumes/backup", methods=["POST"])
-@login_required
+@roles_required("admin", "operator")
 def backup_volume():
     cluster_id = request.form.get("cluster_id", type=int)
     volume_id = request.form.get("volume_id")
@@ -56,15 +56,20 @@ def backup_volume():
         flash("Missing cluster or volume", "error")
         return redirect(url_for("volumes.list_volumes"))
 
-    task_id = db.create_task(
+    task_id, created = db.create_task(
         task_type="backup",
         volume_id=volume_id,
         volume_name=volume_name,
         source_cluster_id=cluster_id,
         created_by=session.get("username"),
-        status="pending",
+        status="queued",
         message="Queued",
+        idempotency_key=f"backup:{cluster_id}:{volume_id}",
+        max_attempts=current_app.config["TASK_MAX_ATTEMPTS"],
     )
-    tasks.submit_backup(current_app._get_current_object(), task_id, cluster_id, volume_id, volume_name)
-    flash(f"Backup started for volume {volume_name} on {cluster['name']} (task #{task_id})", "success")
+    if created:
+        db.create_audit_log(session.get("username"), "backup.queued", "task", task_id, ip_address=request.remote_addr)
+        flash(f"Backup queued for volume {volume_name} on {cluster['name']} (task #{task_id})", "success")
+    else:
+        flash(f"An equivalent backup task already exists (task #{task_id})", "info")
     return redirect(url_for("backups.list_backups"))

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Administration - ops-dras{% endblock %}
+{% block content %}
+<h1>Administration</h1>
+<p class="muted">Manage access roles and review security-sensitive activity.</p>
+
+<section class="admin-section">
+  <div class="section-heading"><h2>Users</h2></div>
+  <form method="post" action="{{ url_for('admin.create_user') }}" class="filter-bar">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input name="username" required maxlength="255" placeholder="Username" aria-label="New username">
+    <input type="password" name="password" required minlength="12" autocomplete="new-password" placeholder="Password (12+ characters)" aria-label="New password">
+    <select name="role" aria-label="New user role"><option value="viewer">Viewer</option><option value="operator">Operator</option><option value="admin">Admin</option></select>
+    <button class="btn btn-primary" type="submit">Create user</button>
+  </form>
+  <div class="table-scroll"><table class="data-table"><thead><tr><th>Username</th><th>Role</th><th>Created</th><th>Change role</th></tr></thead><tbody>
+  {% for user in users %}<tr><td>{{ user.username }}</td><td><span class="badge badge-role">{{ user.role }}</span></td><td>{{ user.created_at }}</td><td>
+    <form method="post" action="{{ url_for('admin.update_role', username=user.username) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><select name="role" aria-label="Role for {{ user.username }}">{% for role in ('viewer','operator','admin') %}<option value="{{ role }}" {{ 'selected' if user.role == role else '' }}>{{ role }}</option>{% endfor %}</select><button class="btn btn-secondary btn-xs" type="submit">Save</button>
+    </form>
+  </td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+
+<section class="admin-section"><div class="section-heading"><h2>Audit log</h2><span class="muted">Latest {{ audit_logs|length }}</span></div>
+  <div class="table-scroll"><table class="data-table"><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Resource</th><th>Source IP</th><th>Details</th></tr></thead><tbody>
+  {% for log in audit_logs %}<tr><td>{{ log.created_at }}</td><td>{{ log.actor }}</td><td><code>{{ log.action }}</code></td><td>{{ log.resource_type }} {{ log.resource_id or '' }}</td><td>{{ log.ip_address or '—' }}</td><td>{{ log.details or '—' }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endblock %}

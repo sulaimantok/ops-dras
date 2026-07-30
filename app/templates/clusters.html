@@ -77,11 +77,11 @@
 <div class="page-header">
   <div>
     <h1>Clusters</h1>
-    <p class="muted">Add as many OpenStack clusters as you need — nothing is read from environment variables, everything below is stored in SQLite. Pick a cluster to browse volumes for Backup, and pick any cluster as the destination when you Restore.</p>
+    <p class="muted">Add as many OpenStack clusters as needed. Credentials are encrypted before being stored in PostgreSQL. Pick a cluster to browse volumes for Backup, and any registered cluster as the Restore destination.</p>
   </div>
 </div>
 
-<details class="cluster-item cluster-item-new" id="cluster-new">
+{% if session.get('role') == 'admin' %}<details class="cluster-item cluster-item-new" id="cluster-new">
   <summary class="cluster-summary">
     <span class="cluster-add-icon" aria-hidden="true">+</span>
     <span class="cluster-summary-main">
@@ -89,12 +89,13 @@
     </span>
   </summary>
   <form method="post" action="{{ url_for('clusters.create_cluster') }}" class="cluster-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {{ cluster_fields(None) }}
     <div class="settings-actions">
       <button type="submit" class="btn btn-primary">Add Cluster</button>
     </div>
   </form>
-</details>
+</details>{% endif %}
 
 {% if not clusters %}
 <p class="muted empty-state">No clusters yet — click "Add New Cluster" above to register the first one.</p>
@@ -114,7 +115,8 @@
           <span class="muted">{{ c.region or 'RegionOne' }}</span>
         </span>
       </summary>
-      <form method="post" action="{{ url_for('clusters.update_cluster', cluster_id=c.id) }}" class="cluster-form">
+      {% if session.get('role') == 'admin' %}<form method="post" action="{{ url_for('clusters.update_cluster', cluster_id=c.id) }}" class="cluster-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {{ cluster_fields(c) }}
         <div class="settings-actions">
           <button type="submit" class="btn btn-primary">Save</button>
@@ -126,7 +128,7 @@
             Delete
           </button>
         </div>
-      </form>
+      </form>{% else %}<div class="cluster-form"><p class="muted">Cluster configuration is read-only for your role.</p></div>{% endif %}
     </details>
   </li>
   {% endfor %}

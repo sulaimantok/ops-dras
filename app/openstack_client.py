@@ -15,7 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 class OpenStackError(Exception):
-    pass
+    def __init__(self, message, code="openstack_error", http_status=None, retryable=False):
+        super().__init__(message)
+        self.code = code
+        self.http_status = http_status
+        self.retryable = retryable
 
 
 class OpenStackClient:
@@ -91,11 +95,15 @@ class OpenStackClient:
                 verify=self.verify_ssl,
             )
         except requests.RequestException as exc:
-            raise OpenStackError(f"[{self.name}] failed to reach Keystone at {url}: {exc}") from exc
+            raise OpenStackError(
+                f"[{self.name}] failed to reach Keystone at {url}: {exc}",
+                code="keystone_network", retryable=True,
+            ) from exc
 
         if resp.status_code != 201:
             raise OpenStackError(
-                f"[{self.name}] Keystone auth failed ({resp.status_code}) at {url}: {resp.text[:500]}"
+                f"[{self.name}] Keystone auth failed ({resp.status_code}) at {url}: {resp.text[:500]}",
+                code="keystone_auth", http_status=resp.status_code, retryable=resp.status_code >= 500,
             )
 
         self._token = resp.headers.get("X-Subject-Token")
@@ -170,7 +178,10 @@ class OpenStackClient:
                 verify=self.verify_ssl, **kwargs,
             )
         except requests.RequestException as exc:
-            raise OpenStackError(f"[{self.name}] {method} {url} failed: {exc}") from exc
+            raise OpenStackError(
+                f"[{self.name}] {method} {url} failed: {exc}",
+                code="cinder_network", retryable=True,
+            ) from exc
 
         if resp.status_code == 401 and retry_on_401:
             self._token = None
@@ -178,7 +189,9 @@ class OpenStackClient:
             return self._request(method, path, retry_on_401=False, **kwargs)
         if resp.status_code >= 400:
             raise OpenStackError(
-                f"[{self.name}] {method} {url} -> {resp.status_code}: {resp.text[:500]}"
+                f"[{self.name}] {method} {url} -> {resp.status_code}: {resp.text[:500]}",
+                code="cinder_http", http_status=resp.status_code,
+                retryable=resp.status_code == 429 or resp.status_code >= 500,
             )
         return resp
 
@@ -188,6 +201,10 @@ class OpenStackClient:
     def list_volumes(self):
         resp = self._request("GET", "/volumes/detail")
         return self._json(resp, resp.url).get("volumes", [])
+
+    def get_volume(self, volume_id):
+        resp = self._request("GET", f"/volumes/{volume_id}")
+        return self._json(resp, resp.url).get("volume", {})
 
     def get_backup(self, backup_id):
         resp = self._request("GET", f"/backups/{backup_id}")
