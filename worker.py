@@ -4,7 +4,7 @@ import signal
 import time
 
 from app import create_app, db
-from app.tasks import process_task
+from app.services.tasks import process_task
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ops-dras-worker")

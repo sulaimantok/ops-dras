@@ -1,8 +1,8 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, session, current_app, request
 
 from app import db
-from app.auth_utils import login_required, roles_required
-from app.openstack_client import OpenStackClient, OpenStackError
+from app.security.auth import login_required, roles_required
+from app.services.openstack import OpenStackClient, OpenStackError
 
 bp = Blueprint("volumes", __name__)
 

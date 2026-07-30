@@ -4,7 +4,7 @@ import os
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app.schema import metadata
+from app.db.schema import metadata
 
 config = context.config
 if config.config_file_name:

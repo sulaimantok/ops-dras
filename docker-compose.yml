@@ -15,7 +15,9 @@ services:
     restart: unless-stopped
 
   ops-dras:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     container_name: ops-dras
     ports:
       - "8080:8080"
@@ -36,7 +38,9 @@ services:
     restart: unless-stopped
 
   worker:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     command: ["python", "worker.py"]
     entrypoint: []
     env_file:

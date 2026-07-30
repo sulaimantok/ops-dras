@@ -2,7 +2,7 @@
 import logging
 
 from app import db
-from app.openstack_client import OpenStackClient, OpenStackError
+from app.services.openstack import OpenStackClient, OpenStackError
 
 logger = logging.getLogger(__name__)
 

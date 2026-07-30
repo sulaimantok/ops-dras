@@ -2,7 +2,7 @@ from flask import Blueprint, flash, redirect, render_template, request, session,
 from sqlalchemy.exc import IntegrityError
 
 from app import db
-from app.auth_utils import roles_required
+from app.security.auth import roles_required
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 

@@ -1,5 +1,28 @@
 # ops-dras
 
+## Repository structure
+
+```text
+app/
+├── db/          # SQLAlchemy engine, schema, and database operations
+├── routes/      # Flask HTTP route blueprints
+├── security/    # Authentication, RBAC, CSRF, and credential encryption
+├── services/    # OpenStack client and persistent task worker logic
+├── templates/   # Jinja HTML templates
+└── static/      # CSS and browser JavaScript
+migrations/      # Alembic database migrations
+scripts/         # PostgreSQL backup and legacy SQLite migration tools
+docker/          # Dockerfile and container entrypoint
+tests/
+├── unit/        # Isolated service/client tests
+└── integration/ # Flask, database, auth, and queue workflow tests
+worker.py        # Persistent database queue worker entrypoint
+wsgi.py          # Gunicorn/Flask entrypoint
+```
+
+Runtime data such as `.env`, PostgreSQL backups, local databases, caches, and
+OpenTofu deployment state are intentionally excluded from the repository.
+
 ## 1. About the Application
 
 **ops-dras** (OpenStack Disaster Recovery as a Service) is a web app for

@@ -4,7 +4,7 @@ from flask import Flask
 
 from config import Config
 from app import db as db_module
-from app.csrf import protect as csrf_protect, token as csrf_token
+from app.security.csrf import protect as csrf_protect, token as csrf_token
 
 
 def create_app(config_object=Config):

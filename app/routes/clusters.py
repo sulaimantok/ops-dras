@@ -3,8 +3,8 @@ from urllib.parse import urlparse
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, session
 
 from app import db
-from app.auth_utils import login_required, roles_required
-from app.openstack_client import OpenStackClient, OpenStackError
+from app.security.auth import login_required, roles_required
+from app.services.openstack import OpenStackClient, OpenStackError
 
 bp = Blueprint("clusters", __name__)
 

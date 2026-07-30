@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template
 
 from app import db
-from app.auth_utils import login_required
+from app.security.auth import login_required
 
 bp = Blueprint("dashboard", __name__)
 

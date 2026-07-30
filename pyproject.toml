@@ -1,5 +1,5 @@
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests/unit", "tests/integration"]
 
 [tool.ruff]
 target-version = "py312"

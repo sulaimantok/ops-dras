@@ -1,8 +1,8 @@
 from flask import Blueprint, jsonify, current_app, request, session
 
 from app import db
-from app.auth_utils import login_required, roles_required
-from app.openstack_client import OpenStackClient, OpenStackError
+from app.security.auth import login_required, roles_required
+from app.services.openstack import OpenStackClient, OpenStackError
 
 bp = Blueprint("api", __name__)
 

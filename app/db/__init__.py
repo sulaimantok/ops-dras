@@ -13,8 +13,8 @@ from sqlalchemy import create_engine, func, inspect, or_, select, text, update
 from sqlalchemy.engine import make_url
 from werkzeug.security import generate_password_hash
 
-from app.crypto import CredentialCipher
-from app.schema import audit_logs, clusters, tasks, users
+from app.db.schema import audit_logs, clusters, tasks, users
+from app.security.credentials import CredentialCipher
 
 logger = logging.getLogger(__name__)
 

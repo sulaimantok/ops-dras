@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 import pytest
 import requests
 
-from app.openstack_client import OpenStackClient, OpenStackError
+from app.services.openstack import OpenStackClient, OpenStackError
 
 
 def config():
@@ -16,7 +16,7 @@ def config():
     }
 
 
-@patch("app.openstack_client.requests.post")
+@patch("app.services.openstack.requests.post")
 def test_keystone_network_error_is_retryable(post):
     post.side_effect = requests.Timeout("timed out")
     with pytest.raises(OpenStackError) as error:
@@ -25,7 +25,7 @@ def test_keystone_network_error_is_retryable(post):
     assert error.value.retryable is True
 
 
-@patch("app.openstack_client.requests.request")
+@patch("app.services.openstack.requests.request")
 def test_cinder_503_is_structured_and_retryable(request):
     response = Mock(status_code=503, text="unavailable")
     request.return_value = response
