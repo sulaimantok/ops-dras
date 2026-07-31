@@ -1,15 +1,16 @@
 from unittest.mock import patch
 
 from app import db
+from app.version import __version__
 from tests.conftest import csrf_token
 
 
 def test_health_and_readiness_are_public(client):
     health = client.get("/healthz").get_json()
-    assert health == {"status": "ok", "version": "0.1.0"}
+    assert health == {"status": "ok", "version": __version__}
     readiness = client.get("/readyz").get_json()
     assert readiness["database"] == "ok"
-    assert readiness["version"] == "0.1.0"
+    assert readiness["version"] == __version__
 
 
 def test_authenticated_pages_render(client):
