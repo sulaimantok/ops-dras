@@ -197,7 +197,8 @@ def delete_cluster(cluster_id):
 def create_task(task_type, volume_id=None, volume_name=None, source_backup_id=None,
                 source_cluster_id=None, dest_cluster_id=None, created_by=None,
                 status="queued", message=None, dest_volume_id=None,
-                idempotency_key=None, max_attempts=3):
+                idempotency_key=None, max_attempts=3, backup_mode="full",
+                parent_backup_id=None):
     with db_cursor() as conn:
         if idempotency_key:
             query = select(tasks.c.id, tasks.c.status).where(tasks.c.idempotency_key == idempotency_key)
@@ -212,6 +213,7 @@ def create_task(task_type, volume_id=None, volume_name=None, source_backup_id=No
             task_type=task_type, volume_id=volume_id, volume_name=volume_name,
             source_backup_id=source_backup_id, source_cluster_id=source_cluster_id,
             dest_cluster_id=dest_cluster_id, dest_volume_id=dest_volume_id,
+            backup_mode=backup_mode, parent_backup_id=parent_backup_id,
             status=status, stage="queued", message=message, created_by=created_by,
             idempotency_key=idempotency_key, max_attempts=max_attempts,
         ))

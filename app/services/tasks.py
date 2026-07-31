@@ -51,21 +51,55 @@ def _run_backup(app, task):
         raise OpenStackError("Source cluster no longer exists", code="cluster_missing")
     client = OpenStackClient(source_cfg, timeout=app.config["OPENSTACK_TIMEOUT"])
     backup_id = task.get("source_backup_id")
+    resolved_incremental = bool(task.get("parent_backup_id"))
     if not backup_id:
+        requested_mode = task.get("backup_mode") or "full"
+        incremental = False
+        parent_backup_id = task.get("parent_backup_id")
+        if requested_mode in {"incremental", "automatic"}:
+            backups = client.list_backups(task["volume_id"])
+            candidates = [
+                backup for backup in backups
+                if backup.get("volume_id") == task["volume_id"] and backup.get("status") == "available"
+            ]
+            candidates.sort(key=lambda backup: backup.get("created_at") or "", reverse=True)
+            parent_backup_id = candidates[0].get("id") if candidates else None
+            if requested_mode == "incremental" and not parent_backup_id:
+                raise OpenStackError(
+                    "Incremental backup requires an available parent backup for this volume",
+                    code="incremental_parent_missing",
+                )
+            incremental = parent_backup_id is not None
+        resolved_incremental = incremental
+
+        db.update_task(
+            task_id,
+            parent_backup_id=parent_backup_id,
+            message=(
+                f"Requesting incremental backup using parent {parent_backup_id}"
+                if incremental else "Requesting full backup from source cluster"
+            ),
+        )
         backup = client.create_backup(
-            task["volume_id"], name=f"ops-dras-{task['volume_name'] or task['volume_id'][:8]}"
+            task["volume_id"],
+            name=f"ops-dras-{task['volume_name'] or task['volume_id'][:8]}",
+            incremental=incremental,
         )
         backup_id = backup["id"]
         db.update_task(
             task_id, source_backup_id=backup_id, stage="waiting_backup",
             message=f"Backup {backup_id} created, waiting for completion",
         )
-    client.wait_for_backup_status(
+    completed = client.wait_for_backup_status(
         backup_id, interval=app.config["BACKUP_POLL_INTERVAL"],
         timeout=app.config["BACKUP_POLL_TIMEOUT"],
     )
+    is_incremental = completed.get("is_incremental")
+    if is_incremental is None:
+        is_incremental = resolved_incremental
     db.update_task(
         task_id, status="succeeded", stage="succeeded", error_code=None, error_detail=None,
+        is_incremental=bool(is_incremental),
         message=f"Backup {backup_id} completed and available", finished_at=db.text("CURRENT_TIMESTAMP"),
     )
     db.create_audit_log(task.get("created_by"), "backup.succeeded", "task", task_id)

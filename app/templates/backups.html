@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Backups &amp; Restores - ops-dras{% endblock %}
+{% block title %}Tasks - ops-dras{% endblock %}
 {% block content %}
-<h1>Backup &amp; Restore Tasks</h1>
-<p class="muted">Backups run on the source cluster. Restoring exports the backup record from the source, imports it on whichever cluster you pick as destination, then triggers the restore there.</p>
+<h1>Tasks</h1>
+<p class="muted">Monitor queued, running, succeeded, failed, and cancelled protection operations. Start new operations from <a href="{{ url_for('protection.index') }}">Protection</a>.</p>
 
 <form method="get" class="filter-bar" aria-label="Task filters">
   <input type="search" name="q" value="{{ filters.q }}" placeholder="Search volume or message" aria-label="Search tasks">
@@ -44,6 +44,11 @@
       {% if t.source_backup_id %}
       <span class="task-id-chip" title="Source backup ID: {{ t.source_backup_id }}">src <code>{{ t.source_backup_id[:8] }}&hellip;</code></span>
       {% endif %}
+      {% if t.task_type == 'backup' %}
+      <span class="task-id-chip" title="Requested backup mode: {{ t.backup_mode }}">
+        {{ 'incremental' if t.is_incremental else ('full' if t.is_incremental is not none else t.backup_mode) }}
+      </span>
+      {% endif %}
       {% if t.dest_backup_id %}
       <span class="task-id-chip" title="Destination backup ID: {{ t.dest_backup_id }}">dst <code>{{ t.dest_backup_id[:8] }}&hellip;</code></span>
       {% endif %}
@@ -62,6 +67,8 @@
         <div><dt>Started</dt><dd>{{ t.started_at or 'Not started' }}</dd></div>
         <div><dt>Finished</dt><dd>{{ t.finished_at or 'In progress' }}</dd></div>
         <div><dt>Attempts</dt><dd>{{ t.attempts }} / {{ t.max_attempts }}</dd></div>
+        {% if t.task_type == 'backup' %}<div><dt>Backup type</dt><dd>{{ 'Incremental' if t.is_incremental else ('Full' if t.is_incremental is not none else t.backup_mode|title) }}</dd></div>{% endif %}
+        {% if t.parent_backup_id %}<div><dt>Parent backup</dt><dd><code>{{ t.parent_backup_id }}</code></dd></div>{% endif %}
       </dl>
       {% if t.error_code %}<div class="task-error" role="alert"><strong>{{ t.error_code }}</strong><p>{{ t.error_detail }}</p></div>{% endif %}
     </details>

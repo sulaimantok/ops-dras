@@ -44,11 +44,17 @@
       <td><span class="badge badge-{{ v.status }}">{{ v.status }}</span></td>
       <td>{{ v.bootable }}</td>
       <td>{% if session.get('role') in ('admin', 'operator') %}
-        <form method="post" action="{{ url_for('volumes.backup_volume') }}">
+        <form method="post" action="{{ url_for('volumes.backup_volume') }}" class="backup-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="cluster_id" value="{{ selected_cluster.id }}">
           <input type="hidden" name="volume_id" value="{{ v.id }}">
           <input type="hidden" name="volume_name" value="{{ v.name or v.id }}">
+          <label class="sr-only" for="backup-mode-{{ v.id }}">Backup type</label>
+          <select name="backup_mode" id="backup-mode-{{ v.id }}" aria-label="Backup type for {{ v.name or v.id }}">
+            <option value="full" selected>Full</option>
+            <option value="incremental">Incremental</option>
+            <option value="automatic">Automatic</option>
+          </select>
           <button type="submit" class="btn btn-primary">Backup</button>
         </form>
         {% else %}<span class="muted">Read only</span>{% endif %}</td>

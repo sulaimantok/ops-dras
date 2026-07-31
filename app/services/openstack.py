@@ -210,13 +210,19 @@ class OpenStackClient:
         resp = self._request("GET", f"/backups/{backup_id}")
         return self._json(resp, resp.url).get("backup", {})
 
-    def create_backup(self, volume_id, name=None, description=None, force=True):
+    def list_backups(self, volume_id=None):
+        params = {"volume_id": volume_id} if volume_id else None
+        resp = self._request("GET", "/backups/detail", params=params)
+        return self._json(resp, resp.url).get("backups", [])
+
+    def create_backup(self, volume_id, name=None, description=None, force=True, incremental=False):
         body = {
             "backup": {
                 "volume_id": volume_id,
                 "name": name or f"ops-dras-{volume_id[:8]}-{int(time.time())}",
                 "description": description or "Created by ops-dras",
                 "force": force,
+                "incremental": incremental,
             }
         }
         resp = self._request("POST", "/backups", json=body)

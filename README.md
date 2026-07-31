@@ -54,7 +54,8 @@ portal, an operator can:
    authenticate with either Username & Password or an **Application
    Credential**.
 2. Pick a cluster, browse its Cinder volumes, and trigger a **backup**
-   (forced) on any volume.
+   (forced) on any volume. Backup mode can be **Full**, **Incremental**, or
+   **Automatic** (incremental when an available parent exists, otherwise full).
 3. **Restore** that backup onto **any registered cluster** (including the
    same cluster) — chosen at restore time, not hardcoded. For cross-cluster
    restores, ops-dras automatically orchestrates Cinder's `export_record` →
@@ -130,11 +131,51 @@ Open `http://localhost:8080`, log in with `DEFAULT_ADMIN_USERNAME` /
    enter the Auth URL, pick an authentication method (Username & Password
    or Application Credential), then click **Test connection** to confirm
    Keystone/Cinder connectivity.
-2. Go to **Volumes** → pick a cluster from the dropdown to browse its
-   volumes → click **Backup** on the volume you want to back up.
-3. Go to **Backups & Restores** → watch the backup progress. Once it's
-   `succeeded`, pick a destination cluster from the dropdown and click
-   **Restore**.
+2. Go to **Protection** → select a source cluster, search the volume list,
+   choose Full, Incremental, or Automatic, then queue the backup. **Volumes**
+   remains available as the native inventory and quick-backup view.
+3. Use **Protection → Restore volume** to select an available recovery point,
+   destination cluster, and optionally an existing destination volume.
+4. Go to **Tasks** to monitor queue status, stages, attempts, errors, and task
+   history, or to cancel a queued operation.
+
+### Protection workflow
+
+The UI separates resource inventory, protection actions, and task monitoring:
+
+```text
+Volumes     Cinder inventory and quick backup actions
+Protection Create backups and restore verified recovery points
+Tasks       Queue progress, results, errors, cancellation, and history
+```
+
+The Protection page is designed for clusters with many volumes and backups:
+
+- client-side volume search by name or ID;
+- a bounded volume table with a sticky header;
+- recovery-point search by volume name, volume ID, or backup ID;
+- source-cluster filtering and pagination;
+- live reconciliation with the source Cinder API whenever the page loads.
+
+A successful local task is not automatically treated as a usable recovery
+point. ops-dras calls Cinder `GET /backups/{backup_id}` and only offers backups
+whose current status is `available`. Backups deleted directly in OpenStack are
+removed from the Protection list while their historical task remains visible
+under Tasks.
+
+### Full, incremental, and automatic backups
+
+- **Full** always requests a full Cinder backup and remains the default for
+  the native quick action on the Volumes page.
+- **Incremental** requires an existing `available` backup for the same volume;
+  otherwise the task fails with a structured `incremental_parent_missing`
+  error.
+- **Automatic** requests an incremental backup when an available parent exists
+  and falls back to a full backup when it does not.
+
+Incremental support ultimately depends on the configured Cinder backup driver
+and backend. ops-dras records the requested mode, actual incremental result,
+and selected parent backup ID in task history.
 
 Cluster passwords and application-credential secrets are encrypted with
 Fernet before being stored in PostgreSQL. The encryption key comes from

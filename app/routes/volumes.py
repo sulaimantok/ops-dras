@@ -50,6 +50,10 @@ def backup_volume():
     cluster_id = request.form.get("cluster_id", type=int)
     volume_id = request.form.get("volume_id")
     volume_name = request.form.get("volume_name", volume_id)
+    backup_mode = request.form.get("backup_mode", "full")
+    if backup_mode not in {"full", "incremental", "automatic"}:
+        flash("Invalid backup type", "error")
+        return redirect(url_for("volumes.list_volumes", cluster_id=cluster_id))
 
     cluster = db.get_cluster(cluster_id) if cluster_id else None
     if not cluster or not volume_id:
@@ -64,12 +68,17 @@ def backup_volume():
         created_by=session.get("username"),
         status="queued",
         message="Queued",
+        backup_mode=backup_mode,
         idempotency_key=f"backup:{cluster_id}:{volume_id}",
         max_attempts=current_app.config["TASK_MAX_ATTEMPTS"],
     )
     if created:
         db.create_audit_log(session.get("username"), "backup.queued", "task", task_id, ip_address=request.remote_addr)
-        flash(f"Backup queued for volume {volume_name} on {cluster['name']} (task #{task_id})", "success")
+        flash(
+            f"{backup_mode.title()} backup queued for volume {volume_name} on "
+            f"{cluster['name']} (task #{task_id})",
+            "success",
+        )
     else:
         flash(f"An equivalent backup task already exists (task #{task_id})", "info")
     return redirect(url_for("backups.list_backups"))

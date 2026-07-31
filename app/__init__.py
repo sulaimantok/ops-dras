@@ -31,6 +31,7 @@ def create_app(config_object=Config):
     from app.routes.api import bp as api_bp
     from app.routes.dashboard import bp as dashboard_bp
     from app.routes.admin import bp as admin_bp
+    from app.routes.protection import bp as protection_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(volumes_bp)
@@ -39,5 +40,6 @@ def create_app(config_object=Config):
     app.register_blueprint(api_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(protection_bp)
 
     return app

@@ -37,3 +37,19 @@ def test_cinder_503_is_structured_and_retryable(request):
     assert error.value.http_status == 503
     assert error.value.code == "cinder_http"
     assert error.value.retryable is True
+
+
+@patch("app.services.openstack.requests.request")
+def test_create_incremental_backup_sends_incremental_flag(request):
+    response = Mock(status_code=202, text="")
+    response.json.return_value = {"backup": {"id": "backup-1"}}
+    response.url = "https://cinder.example/v3/project-id/backups"
+    request.return_value = response
+    client = OpenStackClient(config())
+    client._token = "token"
+    client._cinder_endpoint = "https://cinder.example/v3/project-id"
+
+    result = client.create_backup("volume-1", incremental=True)
+
+    assert result["id"] == "backup-1"
+    assert request.call_args.kwargs["json"]["backup"]["incremental"] is True

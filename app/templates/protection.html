@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Protection - ops-dras{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div><h1>Protection</h1><p class="muted">Create volume backups and restore available recovery points.</p></div>
+</div>
+
+<div class="protection-grid">
+  <section class="operation-panel" aria-labelledby="backup-heading">
+    <div class="panel-heading"><div><span class="eyebrow">01 / Create</span><h2 id="backup-heading">Create backup</h2></div><span class="panel-mark">CINDER</span></div>
+    <p class="muted small">Choose a source cluster, review its volumes, then queue a full, incremental, or automatic backup.</p>
+    <form method="get" class="protection-picker">
+      <label for="protection-cluster">Source cluster</label>
+      <select id="protection-cluster" name="cluster_id" onchange="this.form.submit()">
+        <option value="">Select a cluster...</option>
+        {% for c in clusters %}<option value="{{ c.id }}" {{ 'selected' if selected_cluster and selected_cluster.id == c.id else '' }}>{{ c.name }}</option>{% endfor %}
+      </select>
+    </form>
+    {% if error %}<div class="flash flash-error">{{ error }}</div>
+    {% elif not selected_cluster %}<div class="operation-empty">Select a source cluster to see its volumes.</div>
+    {% elif not volumes %}<div class="operation-empty">No volumes found on this cluster.</div>
+    {% else %}
+    <div class="local-filter"><label class="sr-only" for="volume-filter">Filter volumes</label><input id="volume-filter" type="search" placeholder="Filter volumes by name or ID..."><span class="muted small"><span id="volume-visible-count">{{ volumes|length }}</span> of {{ volumes|length }} volumes</span></div>
+    <div class="table-scroll bounded-table"><table class="data-table protection-table" id="protection-volume-table"><thead><tr><th>Volume</th><th>Size</th><th>State</th><th>Last action</th><th></th></tr></thead><tbody>
+      {% for v in volumes %}<tr data-volume-search="{{ (v.name or '')|lower }} {{ v.id|lower }}">
+        <td><strong>{{ v.name or '(unnamed)' }}</strong><small class="table-subtext"><code>{{ v.id[:12] }}...</code>{% if v.bootable %} · bootable{% endif %}</small></td>
+        <td>{{ v.size }} GiB</td><td><span class="badge badge-{{ v.status }}">{{ v.status }}</span></td>
+        <td class="muted">Use latest available</td>
+        <td>{% if session.get('role') in ('admin', 'operator') %}<form method="post" action="{{ url_for('volumes.backup_volume') }}" class="protection-action">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="cluster_id" value="{{ selected_cluster.id }}"><input type="hidden" name="volume_id" value="{{ v.id }}"><input type="hidden" name="volume_name" value="{{ v.name or v.id }}">
+          <select name="backup_mode" aria-label="Backup type for {{ v.name or v.id }}"><option value="full">Full</option><option value="incremental">Incremental</option><option value="automatic" selected>Automatic</option></select><button class="btn btn-primary" type="submit">Queue backup</button>
+        </form>{% else %}<span class="muted">Read only</span>{% endif %}</td>
+      </tr>{% endfor %}
+    </tbody></table></div>{% endif %}
+  </section>
+
+  <section class="operation-panel" aria-labelledby="restore-heading">
+    <div class="panel-heading"><div><span class="eyebrow">02 / Recover</span><h2 id="restore-heading">Restore volume</h2></div><span class="panel-mark">RECOVERY POINTS</span></div>
+    <p class="muted small">Recovery points are checked against the source Cinder API whenever this page loads.</p>
+    <form method="get" class="filter-bar recovery-filter" aria-label="Recovery point filters">
+      {% if selected_cluster %}<input type="hidden" name="cluster_id" value="{{ selected_cluster.id }}">{% endif %}
+      <input type="search" name="recovery_q" value="{{ recovery_filters.q }}" placeholder="Search volume or backup ID" aria-label="Search recovery points">
+      <select name="recovery_cluster_id" aria-label="Source cluster"><option value="">All source clusters</option>{% for c in clusters %}<option value="{{ c.id }}" {{ 'selected' if recovery_filters.cluster_id == c.id else '' }}>{{ c.name }}</option>{% endfor %}</select>
+      <button class="btn btn-secondary" type="submit">Filter</button><a class="btn btn-secondary" href="{{ url_for('protection.index', cluster_id=selected_cluster.id if selected_cluster else None) }}">Reset</a>
+    </form>
+    <div class="section-count muted small">{{ recovery_total }} available recovery point{{ '' if recovery_total == 1 else 's' }}</div>
+    {% if not restore_candidates %}<div class="operation-empty">No available recovery points yet. Create a backup first.</div>
+    {% else %}<div class="recovery-list">{% for t in restore_candidates %}<article class="recovery-item">
+      <div class="recovery-main"><strong>{{ t.volume_name or t.volume_id }}</strong><span class="muted small">{{ t.source_cluster_name or 'unknown cluster' }} · {{ t.finished_at or t.updated_at }}</span></div>
+      <div class="recovery-meta"><span class="badge badge-{{ 'available' if t.live_status == 'available' else 'pending' }}">{{ t.live_status }}</span>{% if t.is_incremental %}<span class="badge badge-stage">Incremental</span>{% else %}<span class="badge badge-stage">Full</span>{% endif %}</div>
+      {% if session.get('role') in ('admin', 'operator') %}<form method="post" action="{{ url_for('backups.restore_backup', task_id=t.id) }}" class="restore-form protection-restore-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><select name="dest_cluster_id" required aria-label="Destination cluster for {{ t.volume_name or t.volume_id }}"><option value="">Destination cluster...</option>{% for c in clusters %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select><select name="dest_volume_id" class="restore-volume-select" disabled aria-label="Destination volume"><option value="">Create new volume</option></select><button class="btn btn-secondary" type="submit">Restore</button></form>{% endif %}
+    </article>{% endfor %}</div>
+    {% if recovery_pages > 1 %}<nav class="pagination" aria-label="Recovery point pages">
+      {% if recovery_page > 1 %}<a class="btn btn-secondary" href="{{ url_for('protection.index', cluster_id=selected_cluster.id if selected_cluster else None, recovery_q=recovery_filters.q, recovery_cluster_id=recovery_filters.cluster_id, recovery_page=recovery_page-1) }}">Previous</a>{% endif %}
+      <span>Page {{ recovery_page }} of {{ recovery_pages }}</span>
+      {% if recovery_page < recovery_pages %}<a class="btn btn-secondary" href="{{ url_for('protection.index', cluster_id=selected_cluster.id if selected_cluster else None, recovery_q=recovery_filters.q, recovery_cluster_id=recovery_filters.cluster_id, recovery_page=recovery_page+1) }}">Next</a>{% endif %}
+    </nav>{% endif %}{% endif %}
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/tasks.js') }}"></script><script>
+const volumeFilter = document.getElementById('volume-filter');
+if (volumeFilter) volumeFilter.addEventListener('input', () => {
+  const needle = volumeFilter.value.trim().toLowerCase(); let visible = 0;
+  document.querySelectorAll('#protection-volume-table tbody tr').forEach((row) => { const match = row.dataset.volumeSearch.includes(needle); row.hidden = !match; if (match) visible += 1; });
+  document.getElementById('volume-visible-count').textContent = visible;
+});
+document.querySelectorAll('.protection-restore-form select[name="dest_cluster_id"]').forEach((select) => select.addEventListener('change', async () => {
+  const form = select.closest('form'); const target = form.querySelector('.restore-volume-select'); target.innerHTML = '<option value="">Create new volume</option>'; target.disabled = true;
+  if (!select.value) return;
+  try { const response = await fetch(`/api/clusters/${select.value}/volumes`); if (response.ok) (await response.json()).forEach((v) => { const option = document.createElement('option'); option.value = v.id; option.textContent = `${v.name} (${v.size} GiB, ${v.status})`; target.appendChild(option); }); } finally { target.disabled = false; }
+}));
+</script>{% endblock %}
