@@ -1,330 +1,101 @@
 # ops-dras
 
-## Repository structure
+OpenStack Disaster Recovery as a Service portal for orchestrating Cinder
+volume backups and restores across one or more OpenStack clusters.
 
-```text
-app/
-├── db/          # SQLAlchemy engine, schema, and database operations
-├── routes/      # Flask HTTP route blueprints
-├── security/    # Authentication, RBAC, CSRF, and credential encryption
-├── services/    # OpenStack client and persistent task worker logic
-├── templates/   # Jinja HTML templates
-└── static/      # CSS and browser JavaScript
-migrations/      # Alembic database migrations
-scripts/         # PostgreSQL backup and legacy SQLite migration tools
-docker/          # Dockerfile and container entrypoint
-tests/
-├── unit/        # Isolated service/client tests
-└── integration/ # Flask, database, auth, and queue workflow tests
-worker.py        # Persistent database queue worker entrypoint
-wsgi.py          # Gunicorn/Flask entrypoint
+## High-level design
+
+ops-dras separates interactive requests from long-running OpenStack
+operations. The Flask web application validates access and stores a task in
+PostgreSQL; a dedicated worker claims that task and calls Keystone/Cinder.
+
+```mermaid
+flowchart LR
+    operator[Operator / Browser]
+    web[Flask / Gunicorn Web<br/>Auth, RBAC, CSRF, UI]
+    database[(PostgreSQL 16<br/>Users, clusters, tasks, audit log)]
+    worker[Persistent Worker<br/>Retry and task stages]
+    openstack[OpenStack Cluster<br/>Keystone + Cinder]
+
+    operator -->|HTTP| web
+    web <-->|Configuration and task records| database
+    worker <-->|Claim and update tasks| database
+    web -->|Inventory and connection checks| openstack
+    worker -->|Backup and restore APIs| openstack
 ```
 
-Runtime data such as `.env`, PostgreSQL backups, local databases, caches, and
-OpenTofu deployment state are intentionally excluded from the repository.
+| Component | Responsibility |
+| --- | --- |
+| Web | Login, RBAC, CSRF, cluster configuration, inventory, task creation, and monitoring |
+| PostgreSQL | Persistent users, encrypted cluster configuration, task queue, and audit history |
+| Worker | Claims queued jobs, executes backup/restore stages, retries transient failures, and records results |
+| OpenStack | Keystone authentication and Cinder volume/backup operations |
 
-## Versioning and releases
+## About the application
 
-ops-dras uses Semantic Versioning (`MAJOR.MINOR.PATCH`) and Conventional
-Commits. Release Please runs on pushes to `main` and opens a Release PR that
-updates `CHANGELOG.md`, the version in `app/version.py`, and the release
-manifest. Merging that PR creates an annotated `vX.Y.Z` GitHub Release/tag.
+ops-dras provides:
 
-Examples:
+- Multi-cluster OpenStack configuration with password or Application Credential authentication.
+- Native Cinder volume inventory and quick backup actions.
+- Full, Incremental, and Automatic backup modes.
+- Same-cluster and cross-cluster volume restore.
+- Protection workflow for creating backups and restoring verified recovery points.
+- Tasks workflow for queue progress, errors, cancellation, and history.
+- Encrypted cluster secrets, RBAC, CSRF protection, audit logging, retry, and idempotency.
 
-```text
-fix: handle expired Keystone token       → PATCH release
-feat: add cluster health dashboard        → MINOR release
-feat!: change task API response           → MAJOR release
-```
+Cross-cluster restore transfers backup metadata, not backup payload data. The
+source and destination Cinder services must access a compatible or shared
+backup backend.
 
-The published release workflow builds multi-architecture images and pushes
-them to `ghcr.io/<owner>/<repository>` with SemVer, commit-SHA, and (for a
-stable release) `latest` tags. Alembic revisions are database schema versions
-and are intentionally independent from application versions.
-
-## 1. About the Application
-
-**ops-dras** (OpenStack Disaster Recovery as a Service) is a web app for
-managing Cinder volume disaster recovery on OpenStack. From a single
-portal, an operator can:
-
-1. Register **any number of OpenStack clusters** (not limited to a fixed
-   source/destination pair) from the **Clusters** page — each cluster can
-   authenticate with either Username & Password or an **Application
-   Credential**.
-2. Pick a cluster, browse its Cinder volumes, and trigger a **backup**
-   (forced) on any volume. Backup mode can be **Full**, **Incremental**, or
-   **Automatic** (incremental when an available parent exists, otherwise full).
-3. **Restore** that backup onto **any registered cluster** (including the
-   same cluster) — chosen at restore time, not hardcoded. For cross-cluster
-   restores, ops-dras automatically orchestrates Cinder's `export_record` →
-   `import_record` → `restore` flow in the background, so the UI never
-   blocks waiting for it to finish.
-
-Cluster credentials are **not** configured via environment variables.
-Everything is entered from the **Clusters** page and stored encrypted in
-PostgreSQL using the Fernet key supplied through `CLUSTER_CREDENTIALS_KEY`.
-
-## 2. Requirements
-
-These specifications cover the complete ops-dras stack: the Flask/Gunicorn
-web service, persistent queue worker, and PostgreSQL 16 database. They do not
-include the OpenStack clusters or Cinder backup storage managed by ops-dras.
+## Requirements
 
 | | Minimum | Recommended |
-|---|---|---|
+| --- | --- | --- |
 | vCPU | 2 | 4 |
 | RAM | 2 GB | 4 GB |
-| Disk | 10 GB free | 20 GB+ free |
-| OS | Linux with Docker Engine 24+ (or macOS/Windows with Docker Desktop) | same |
-| Architecture | x86_64 (amd64) or arm64 | same |
-| Network | Outbound HTTPS to each registered Keystone and Cinder endpoint; inbound to port `8080` or a TLS reverse proxy | Restrict inbound access to trusted CIDRs and expose the application through HTTPS |
+| Disk | 10 GB free | 20 GB+ |
+| OS | Linux with Docker Engine 24+ | same |
+| Architecture | amd64 or arm64 | same |
+| Network | Outbound HTTPS to Keystone/Cinder; inbound port `8080` or TLS proxy | Restrict inbound CIDRs and use HTTPS |
 
-Disk is used by container images, PostgreSQL data, task/audit history, and
-scheduled database dumps. ops-dras does not copy Cinder backup payloads, so
-actual volume-backup data remains in the configured Cinder backup backend.
-The default PostgreSQL directory is `/opt/data/ops-dras-postgres`, while the
-documented backup job writes compressed dumps under
-`$OPS_DRAS_DIR/backups`. Monitor both locations and increase disk
-capacity according to retention and task-history growth.
+OpenStack clusters must be reachable and have Cinder Backup enabled. For
+cross-cluster restore, both clusters must access compatible backup storage.
+The configured OpenStack user or Application Credential needs volume and
+backup permissions.
 
-## 3. OpenStack Cluster Requirements
-
-ops-dras only orchestrates existing Cinder APIs — the OpenStack cluster(s)
-themselves must already be:
-
-- **Running** and reachable (Keystone + Cinder public endpoint reachable
-  from wherever ops-dras is deployed).
-- **Cinder Backup service enabled** (`cinder-backup`), with a backup
-  backend already configured (NFS, Ceph, or S3). Without this, the
-  `backups`, `export_record`, `import_record`, and `restore` endpoints
-  won't be available. *(How to enable it depends on how your OpenStack
-  cluster was deployed — kolla-ansible, Kayobe, OpenStack-Ansible, TripleO,
-  etc. — so it's not covered here; check your deployment tool's
-  documentation for enabling `cinder-backup` and its backend.)*
-- For **cross-cluster restores**, the source and destination clusters'
-  backup backends must be able to see the same storage (e.g. the same Ceph
-  backup pool, or the same S3 bucket/NFS share) — ops-dras only moves the
-  metadata pointer, not the backup data itself.
-- The user/Application Credential used needs the Cinder volume & backup
-  permissions (roles) on the relevant project (`list volumes`,
-  `create/get backup`, `export/import backup record`, `restore backup`).
-
-## 4. Running the Application
+## Quick start
 
 ```bash
+git clone git@github.com:sulaimantok/ops-dras.git
 cd ops-dras
 cp .env.example .env
-# edit .env: change SECRET_KEY, DEFAULT_ADMIN_PASSWORD, and set
-# CLUSTER_CREDENTIALS_KEY (see .env.example for the generator command).
-# OpenStack cluster credentials are NOT set here — add them from the UI.
+```
 
+Set at least `SECRET_KEY`, `DEFAULT_ADMIN_PASSWORD`,
+`CLUSTER_CREDENTIALS_KEY`, and `POSTGRES_PASSWORD` in `.env`. OpenStack
+credentials are entered later from the Clusters page.
+
+```bash
 docker compose up --build
 ```
 
-Open `http://localhost:8080`, log in with `DEFAULT_ADMIN_USERNAME` /
-`DEFAULT_ADMIN_PASSWORD` from `.env` (defaults to `admin` / `change-me` —
-**must be changed** before using this outside a lab), then:
+Open `http://localhost:8080`, sign in with the configured admin credentials,
+then:
 
-1. Go to **Clusters** → add each OpenStack cluster (more than one is fine):
-   enter the Auth URL, pick an authentication method (Username & Password
-   or Application Credential), then click **Test connection** to confirm
-   Keystone/Cinder connectivity.
-2. Go to **Protection** → select a source cluster, search the volume list,
-   choose Full, Incremental, or Automatic, then queue the backup. **Volumes**
-   remains available as the native inventory and quick-backup view.
-3. Use **Protection → Restore volume** to select an available recovery point,
-   destination cluster, and optionally an existing destination volume.
-4. Go to **Tasks** to monitor queue status, stages, attempts, errors, and task
-   history, or to cancel a queued operation.
+1. Add OpenStack clusters from **Clusters**.
+2. Use **Protection** to create backups or restore recovery points.
+3. Use **Volumes** for inventory and native quick actions.
+4. Use **Tasks** to monitor operations.
 
-### Protection workflow
+The application runs `alembic upgrade head` before Gunicorn starts.
 
-The UI separates resource inventory, protection actions, and task monitoring:
+## Documentation
 
-```text
-Volumes     Cinder inventory and quick backup actions
-Protection Create backups and restore verified recovery points
-Tasks       Queue progress, results, errors, cancellation, and history
-```
+- [Operations and Protection](docs/operations.md)
+- [Deployment and Operations](docs/deployment.md)
+- [Versioning and Releases](docs/releases.md)
+- [Repository Structure](docs/repository-structure.md)
+- [Contribution Guide](docs/CONTRIBUTING.md)
 
-The Protection page is designed for clusters with many volumes and backups:
-
-- client-side volume search by name or ID;
-- a bounded volume table with a sticky header;
-- recovery-point search by volume name, volume ID, or backup ID;
-- source-cluster filtering and pagination;
-- live reconciliation with the source Cinder API whenever the page loads.
-
-A successful local task is not automatically treated as a usable recovery
-point. ops-dras calls Cinder `GET /backups/{backup_id}` and only offers backups
-whose current status is `available`. Backups deleted directly in OpenStack are
-removed from the Protection list while their historical task remains visible
-under Tasks.
-
-### Full, incremental, and automatic backups
-
-- **Full** always requests a full Cinder backup and remains the default for
-  the native quick action on the Volumes page.
-- **Incremental** requires an existing `available` backup for the same volume;
-  otherwise the task fails with a structured `incremental_parent_missing`
-  error.
-- **Automatic** requests an incremental backup when an available parent exists
-  and falls back to a full backup when it does not.
-
-Incremental support ultimately depends on the configured Cinder backup driver
-and backend. ops-dras records the requested mode, actual incremental result,
-and selected parent backup ID in task history.
-
-Cluster passwords and application-credential secrets are encrypted with
-Fernet before being stored in PostgreSQL. The encryption key comes from
-`CLUSTER_CREDENTIALS_KEY` in `.env`; credentials are never written to source
-files or committed to the repository. Keep database backups and the `.env`
-file protected and stored separately, because both are required to decrypt
-the credentials.
-
-Docker Compose starts PostgreSQL 16 by default. Its data persists on the
-host at `/opt/data/ops-dras-postgres` (change `POSTGRES_DATA_DIR` in `.env`
-if needed). The app runs `alembic upgrade head` before Gunicorn starts.
-
-To use an existing PostgreSQL server instead, set `DATABASE_URL` in `.env`:
-
-```bash
-DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:5432/DATABASE
-```
-
-For Compose, start only the app without its local database dependency:
-
-```bash
-docker compose up --no-deps ops-dras
-```
-
-The database user must be allowed to create/update the ops-dras schema
-through Alembic migrations.
-
-The Compose stack also runs a separate persistent queue worker. Web requests
-only enqueue backup/restore jobs in PostgreSQL; the worker claims and executes
-them. Interrupted jobs are requeued when the worker restarts, and transient
-Keystone/Cinder failures use exponential backoff.
-
-### Health checks
-
-- `GET /healthz` reports that the web process is alive.
-- `GET /readyz` verifies database connectivity and returns HTTP 503 when the
-  application is not ready to receive traffic.
-
-### Roles and audit log
-
-The initial user is an `admin`. Admins can create users and assign `admin`,
-`operator`, or `viewer` roles from the **Admin** page. Operators can run
-backups/restores and test cluster connectivity. Viewers have read-only access.
-Security-sensitive operations and job results are recorded in the audit log.
-
-### PostgreSQL backups
-
-Run an on-demand compressed backup:
-
-```bash
-chmod +x scripts/backup_postgres.sh
-scripts/backup_postgres.sh $OPS_DRAS_DIR
-```
-
-The default destination is `$OPS_DRAS_DIR/backups`, with 14-day
-retention. Set `BACKUP_RETENTION_DAYS` to change it and schedule the command
-using cron or a systemd timer. Test restores regularly on a separate database:
-
-```bash
-gunzip -c backups/ops-dras-TIMESTAMP.sql.gz | \
-  docker compose exec -T postgres psql -U ops_dras -d ops_dras
-```
-
-### Production network exposure
-
-Port 8080 is intended for a trusted network or a TLS reverse proxy. For public
-deployment, terminate HTTPS with Nginx/Traefik, restrict inbound CIDRs, set
-`SESSION_COOKIE_SECURE=1`, and set `REQUIRE_HTTPS_AUTH_URL=1`. Direct HTTP by
-IP currently requires `SESSION_COOKIE_SECURE=0`.
-
-### Private OpenStack certificate authorities (temporary injection)
-
-Installing an internal CA on the Docker host does not automatically update the
-Python `certifi` bundle inside existing containers. To inject a CA temporarily
-without changing Compose, copy and append it to both the web and worker bundle:
-
-```bash
-cd $OPS_DRAS_DIR
-docker compose cp /usr/local/share/ca-certificates/atmosphere-ca.crt \
-  ops-dras:/tmp/atmosphere-ca.crt
-docker compose exec -T ops-dras sh -c \
-  'cat /tmp/atmosphere-ca.crt >> "$(python -m certifi)"'
-
-docker compose cp /usr/local/share/ca-certificates/atmosphere-ca.crt \
-  worker:/tmp/atmosphere-ca.crt
-docker compose exec -T worker sh -c \
-  'cat /tmp/atmosphere-ca.crt >> "$(python -m certifi)"'
-```
-
-Gunicorn can reload its workers without recreating the injected filesystem:
-
-```bash
-docker compose exec -T ops-dras python -c \
-  'import os, signal; os.kill(1, signal.SIGHUP)'
-```
-
-The queue worker has no reload mechanism. Snapshot the injected worker
-container and recreate it from that temporary local image so the CA is present
-before `worker.py` starts:
-
-```bash
-worker_id=$(docker compose ps -q worker)
-docker commit "$worker_id" ops-dras-worker:latest
-docker compose up -d --force-recreate --no-build worker
-```
-
-Verify TLS from each container:
-
-```bash
-docker compose exec -T ops-dras python -c \
-  'import requests; print(requests.get("https://identity.ops.sd.boer.id/v3", timeout=15).status_code)'
-docker compose exec -T worker python -c \
-  'import requests; print(requests.get("https://identity.ops.sd.boer.id/v3", timeout=15).status_code)'
-```
-
-This injection is lost whenever the application images are rebuilt, so repeat
-the injection, Gunicorn reload, and worker snapshot after `docker compose
-up --build`.
-
-### Migrating an existing SQLite installation
-
-This section is only for installations upgraded from an earlier ops-dras
-version that still stored users, cluster configuration, and task history in
-`data/ops-dras.sqlite3`. New installations already use PostgreSQL by default
-and do not need this migration. The script performs a one-time copy from the
-legacy SQLite database into an empty PostgreSQL schema while preserving IDs
-and encrypted credential values.
-
-1. Stop ops-dras and back up `data/ops-dras.sqlite3`.
-2. Configure the target `DATABASE_URL` and run `alembic upgrade head`.
-3. Copy data once, preserving the old SQLite file as rollback backup:
-
-```bash
-python scripts/migrate_sqlite_to_postgres.py \
-  --source sqlite:////absolute/path/to/ops-dras.sqlite3 \
-  --target "$DATABASE_URL"
-```
-
-4. Start the app against PostgreSQL and verify users, clusters, and task
-   history before retiring the SQLite database.
-
-**Running without Docker (development):**
-```bash
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-# Set DATABASE_URL to a reachable development PostgreSQL database.
-export DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:5432/ops_dras
-set -a && . ./.env && set +a
-alembic upgrade head
-python wsgi.py
-```
+Runtime data such as `.env`, PostgreSQL backups, local databases, caches, and
+OpenTofu deployment state are intentionally excluded from the repository.
