@@ -13,6 +13,22 @@ points are checked against `GET /backups/{backup_id}` in source Cinder whenever
 the page loads. Backups deleted in OpenStack or no longer `available` are not
 offered for restore, while their local task history remains visible in Tasks.
 
+## Volume inventory
+
+The Volumes page provides the native Cinder inventory and a quick backup action
+for each volume. Operators select a source cluster, review volume state and
+bootability, then choose a backup mode.
+
+![Cinder volume inventory with backup mode selection and backup actions](images/volumes.png)
+
+## Protection workspace
+
+The Protection page is the primary workspace for creating backups and
+restoring verified recovery points. Backup creation and recovery are presented
+as separate full-width operations so large inventories remain readable.
+
+![Protection workspace with create backup and restore volume sections](images/protections.png)
+
 ## Backup and restore details
 
 Detailed Mermaid flows and the incremental backup behavior are documented in
@@ -61,6 +77,14 @@ flowchart TD
 - The volume table has bounded scrolling and a sticky header.
 - Recovery points support search by volume name, volume ID, or backup ID.
 - Recovery points support source-cluster filtering and pagination.
+
+## Task monitoring
+
+The Tasks page separates operation monitoring from resource selection. It
+shows task type, route, stage, result, timestamps, backup IDs, error detail,
+and permitted actions such as cancellation or history deletion.
+
+![Task monitoring page showing backup and restore task cards](images/tasks.png)
 
 ### Incremental backup behavior
 

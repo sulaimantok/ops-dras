@@ -47,6 +47,13 @@ Cross-cluster restore transfers backup metadata, not backup payload data. The
 source and destination Cinder services must access a compatible or shared
 backup backend.
 
+### Operations dashboard
+
+The dashboard summarizes registered clusters, active tasks, successful and
+failed operations, and recent backup/restore activity.
+
+![ops-dras operations dashboard showing cluster and task summaries](docs/images/dashboard.png)
+
 ## Requirements
 
 | | Minimum | Recommended |
