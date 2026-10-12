@@ -5,6 +5,13 @@ All notable changes to ops-dras will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [0.2.1](https://github.com/sulaimantok/ops-dras/compare/v0.2.0...v0.2.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* add restore overwrite guard, cluster connection inspector, and volume pagination ([#5](https://github.com/sulaimantok/ops-dras/issues/5)) ([999733c](https://github.com/sulaimantok/ops-dras/commit/999733c093034b866971ad85e29cb52705e137e5))
+
 ## [0.2.0](https://github.com/sulaimantok/ops-dras/compare/v0.1.0...v0.2.0) (2026-07-31)
 
 
