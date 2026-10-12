@@ -67,7 +67,8 @@ def _validate_cluster_fields(fields, existing=None):
 @login_required
 def list_clusters():
     clusters = db.list_clusters()
-    return render_template("clusters.html", clusters=clusters)
+    test_results = session.get("cluster_test_results", {})
+    return render_template("clusters.html", clusters=clusters, test_results=test_results)
 
 
 @bp.route("/clusters", methods=["POST"])
@@ -124,6 +125,9 @@ def delete_cluster(cluster_id):
             flash("Cluster cannot be deleted while it is used by an active task", "error")
             return redirect(url_for("clusters.list_clusters"))
         db.delete_cluster(cluster_id)
+        test_results = session.get("cluster_test_results", {})
+        test_results.pop(str(cluster_id), None)
+        session["cluster_test_results"] = test_results
         db.create_audit_log(session.get("username"), "cluster.deleted", "cluster", cluster_id, existing["name"], request.remote_addr)
         flash(f"Cluster '{existing['name']}' deleted", "success")
     return redirect(url_for("clusters.list_clusters"))
@@ -137,11 +141,25 @@ def test_connection(cluster_id):
         flash("Cluster not found", "error")
         return redirect(url_for("clusters.list_clusters"))
 
+    test_results = session.get("cluster_test_results", {})
     try:
         client = OpenStackClient(cfg, timeout=current_app.config["OPENSTACK_TIMEOUT"])
-        client.authenticate()
-        flash(f"Connection to {cfg['name']} succeeded", "success")
+        result = client.inspect_connection()
+        test_results[str(cluster_id)] = result
+        session["cluster_test_results"] = test_results
+        session.modified = True
+        flash(f"Connection to {cfg['name']} succeeded ({result['latency_ms']}ms)", "success")
+        db.create_audit_log(session.get("username"), "cluster.tested", "cluster", cluster_id, f"Success ({result['latency_ms']}ms)", request.remote_addr)
     except OpenStackError as exc:
+        test_results[str(cluster_id)] = {
+            "ok": False,
+            "error": str(exc),
+            "code": getattr(exc, "code", "openstack_error"),
+            "http_status": getattr(exc, "http_status", None),
+        }
+        session["cluster_test_results"] = test_results
+        session.modified = True
         flash(f"Connection to {cfg['name']} failed: {exc}", "error")
+        db.create_audit_log(session.get("username"), "cluster.tested", "cluster", cluster_id, f"Failed: {exc}", request.remote_addr)
 
     return redirect(url_for("clusters.list_clusters", _anchor=f"cluster-{cluster_id}"))

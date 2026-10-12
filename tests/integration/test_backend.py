@@ -137,3 +137,75 @@ def test_login_rate_limit_is_persisted(client):
         "/login", data={"username": "admin", "password": "wrong", "csrf_token": token}
     )
     assert response.status_code == 429
+
+
+@patch("app.routes.volumes.OpenStackClient")
+def test_volumes_search_and_pagination(openstack_client, client):
+    token = csrf_token(client)
+    client.post("/login", data={"username": "admin", "password": "test-password", "csrf_token": token})
+    with client.application.app_context():
+        cluster_id = db.create_cluster(
+            name="cluster-test", auth_url="https://keystone.example/v3", auth_method="password",
+            username="user", password="secret", project_name="project", project_id="",
+            user_domain="Default", project_domain="Default", region="RegionOne", verify_ssl=True,
+        )
+
+    fake_volumes = [
+        {"id": f"vol-web-{i}", "name": f"webserver-{i}", "size": 10, "status": "available", "bootable": True}
+        for i in range(1, 25)
+    ] + [
+        {"id": "vol-db-1", "name": "database-main", "size": 50, "status": "available", "bootable": False}
+    ]
+    openstack_client.return_value.list_volumes.return_value = fake_volumes
+
+    # Test filtering
+    resp = client.get(f"/volumes?cluster_id={cluster_id}&q=database")
+    assert resp.status_code == 200
+    assert b"database-main" in resp.data
+    assert b"webserver-1" not in resp.data
+
+    # Test pagination page 1 (15 items)
+    resp_p1 = client.get(f"/volumes?cluster_id={cluster_id}&page=1")
+    assert resp_p1.status_code == 200
+    assert b"webserver-1" in resp_p1.data
+    assert b"Page 1 of 2" in resp_p1.data
+
+    # Test pagination page 2
+    resp_p2 = client.get(f"/volumes?cluster_id={cluster_id}&page=2")
+    assert resp_p2.status_code == 200
+    assert b"Page 2 of 2" in resp_p2.data
+
+
+@patch("app.routes.clusters.OpenStackClient")
+def test_cluster_test_connection_stores_result(openstack_client, client):
+    token = csrf_token(client)
+    client.post("/login", data={"username": "admin", "password": "test-password", "csrf_token": token})
+    with client.application.app_context():
+        cluster_id = db.create_cluster(
+            name="cluster-inspect", auth_url="https://keystone.example/v3", auth_method="password",
+            username="user", password="secret", project_name="project", project_id="",
+            user_domain="Default", project_domain="Default", region="RegionOne", verify_ssl=True,
+        )
+
+    openstack_client.return_value.inspect_connection.return_value = {
+        "ok": True,
+        "latency_ms": 120,
+        "keystone_latency_ms": 60,
+        "cinder_latency_ms": 60,
+        "project_id": "proj-xyz",
+        "project_name": "prod",
+        "user_name": "operator",
+        "cinder_endpoint": "https://cinder.example/v3",
+        "region": "RegionOne",
+        "auth_method": "password",
+        "catalog_services": ["identity", "block-storage"],
+    }
+
+    token = csrf_token(client, "/clusters")
+    resp = client.post(f"/clusters/{cluster_id}/test", data={"csrf_token": token})
+    assert resp.status_code == 302
+
+    resp_clusters = client.get("/clusters")
+    assert resp_clusters.status_code == 200
+    assert b"ONLINE (120ms)" in resp_clusters.data
+    assert b"proj-xyz" in resp_clusters.data

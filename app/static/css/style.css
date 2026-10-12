@@ -319,6 +319,82 @@ code { background: var(--panel-2); padding: 2px 6px; border-radius: 4px; font-si
 .inline-form { display: flex; gap: 6px; align-items: center; }
 .inline-form select { padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); }
 
+/* --- Modal Dialog for Sensitive Operations --- */
+.modal-dialog {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 24px;
+  max-width: 560px;
+  width: 92%;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+}
+.modal-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(3px);
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+.modal-header h3 { margin: 0; font-size: 1.2rem; }
+.modal-body { margin-bottom: 20px; font-size: 0.92rem; }
+.modal-summary-grid {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 8px 12px;
+  background: var(--panel-2);
+  padding: 12px;
+  border-radius: 6px;
+  margin: 12px 0;
+}
+.modal-summary-grid dt { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; margin: 0; }
+.modal-summary-grid dd { margin: 0; font-size: 0.88rem; overflow-wrap: anywhere; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+
+/* --- Cluster Test Results Panel --- */
+.test-result-box {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  font-size: 0.88rem;
+}
+.test-result-box.test-success {
+  border-color: rgba(34, 197, 139, 0.4);
+  background: rgba(34, 197, 139, 0.08);
+}
+.test-result-box.test-error {
+  border-color: rgba(239, 90, 111, 0.4);
+  background: rgba(239, 90, 111, 0.08);
+}
+.test-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.test-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.test-result-grid div {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 6px 10px;
+  border-radius: 4px;
+}
+.test-result-grid dt { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; margin: 0; }
+.test-result-grid dd { font-size: 0.82rem; margin: 2px 0 0; overflow-wrap: anywhere; }
+
+
 @media (max-width: 760px) {
   .topbar { align-items: flex-start; gap: 12px; flex-wrap: wrap; padding: 12px 16px; }
   .topbar nav { order: 3; width: 100%; display: flex; gap: 12px; overflow-x: auto; }

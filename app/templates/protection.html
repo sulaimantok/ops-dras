@@ -57,6 +57,40 @@
     </nav>{% endif %}{% endif %}
   </section>
 </div>
+
+<dialog id="restore-confirm-dialog" class="modal-dialog">
+  <div class="modal-header">
+    <h3 id="modal-title">Confirm Volume Restore</h3>
+    <button type="button" class="btn btn-secondary" id="modal-close-icon" aria-label="Close dialog">&times;</button>
+  </div>
+  <div class="modal-body">
+    <p>Please review the restore destination and target parameters before queuing this task:</p>
+    <dl class="modal-summary-grid">
+      <dt>Source Recovery</dt>
+      <dd id="modal-source-info">-</dd>
+      <dt>Destination</dt>
+      <dd id="modal-dest-cluster">-</dd>
+      <dt>Target Action</dt>
+      <dd id="modal-target-volume">-</dd>
+    </dl>
+    <div id="modal-overwrite-warning" style="display:none; margin: 14px 0; padding: 12px 14px; border-radius: 6px; background: rgba(239, 90, 111, 0.12); border: 1px solid var(--danger);">
+      <strong style="color: var(--danger); display: flex; align-items: center; gap: 6px;">
+        <span aria-hidden="true">&#9888;</span> CRITICAL: DATA OVERWRITE WARNING
+      </strong>
+      <p style="margin: 6px 0 10px; font-size: 0.86rem; color: var(--text);">
+        You have selected an <strong>existing destination volume</strong>. Restoring onto this volume will <strong>permanently overwrite and destroy</strong> all its existing data.
+      </p>
+      <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--danger); cursor: pointer;">
+        <input type="checkbox" id="modal-confirm-overwrite-checkbox">
+        I understand that data on the destination volume will be permanently overwritten.
+      </label>
+    </div>
+  </div>
+  <div class="modal-actions">
+    <button type="button" class="btn btn-secondary" id="modal-cancel-btn">Cancel</button>
+    <button type="button" class="btn btn-primary" id="modal-confirm-btn">Confirm &amp; Restore</button>
+  </div>
+</dialog>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='js/tasks.js') }}"></script><script>
 const volumeFilter = document.getElementById('volume-filter');
@@ -70,4 +104,98 @@ document.querySelectorAll('.protection-restore-form select[name="dest_cluster_id
   if (!select.value) return;
   try { const response = await fetch(`/api/clusters/${select.value}/volumes`); if (response.ok) (await response.json()).forEach((v) => { const option = document.createElement('option'); option.value = v.id; option.textContent = `${v.name} (${v.size} GiB, ${v.status})`; target.appendChild(option); }); } finally { target.disabled = false; }
 }));
+
+// Restore confirmation dialog & overwrite protection
+const restoreDialog = document.getElementById('restore-confirm-dialog');
+const modalCloseIcon = document.getElementById('modal-close-icon');
+const modalSourceInfo = document.getElementById('modal-source-info');
+const modalDestCluster = document.getElementById('modal-dest-cluster');
+const modalTargetVolume = document.getElementById('modal-target-volume');
+const modalOverwriteWarning = document.getElementById('modal-overwrite-warning');
+const modalConfirmCheckbox = document.getElementById('modal-confirm-overwrite-checkbox');
+const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+const modalCancelBtn = document.getElementById('modal-cancel-btn');
+
+let pendingRestoreForm = null;
+
+function closeRestoreDialog() {
+  if (restoreDialog) {
+    if (typeof restoreDialog.close === 'function') {
+      restoreDialog.close();
+    } else {
+      restoreDialog.removeAttribute('open');
+    }
+  }
+  pendingRestoreForm = null;
+}
+
+if (modalCloseIcon) modalCloseIcon.addEventListener('click', closeRestoreDialog);
+if (modalCancelBtn) modalCancelBtn.addEventListener('click', closeRestoreDialog);
+
+document.querySelectorAll('.protection-restore-form').forEach((form) => {
+  form.addEventListener('submit', (e) => {
+    if (form.dataset.confirmed === 'true') {
+      return;
+    }
+    e.preventDefault();
+    const destClusterSelect = form.querySelector('select[name="dest_cluster_id"]');
+    if (!destClusterSelect || !destClusterSelect.value) {
+      if (destClusterSelect) destClusterSelect.focus();
+      return;
+    }
+    pendingRestoreForm = form;
+    const article = form.closest('.recovery-item');
+    const sourceTitle = article ? article.querySelector('.recovery-main strong').textContent.trim() : 'Source Recovery Point';
+    const sourceMeta = article ? article.querySelector('.recovery-main span').textContent.trim() : '';
+    const destClusterText = destClusterSelect.options[destClusterSelect.selectedIndex].text;
+    const destVolSelect = form.querySelector('.restore-volume-select');
+    const isExistingVol = Boolean(destVolSelect && destVolSelect.value);
+    const targetVolText = isExistingVol ? destVolSelect.options[destVolSelect.selectedIndex].text : 'Create new volume';
+
+    modalSourceInfo.textContent = `${sourceTitle} (${sourceMeta})`;
+    modalDestCluster.textContent = destClusterText;
+    modalTargetVolume.textContent = targetVolText;
+
+    if (isExistingVol) {
+      modalOverwriteWarning.style.display = 'block';
+      modalConfirmCheckbox.checked = false;
+      modalConfirmBtn.disabled = true;
+      modalConfirmBtn.className = 'btn btn-danger';
+      modalConfirmBtn.textContent = 'Confirm & Overwrite Volume';
+    } else {
+      modalOverwriteWarning.style.display = 'none';
+      modalConfirmCheckbox.checked = false;
+      modalConfirmBtn.disabled = false;
+      modalConfirmBtn.className = 'btn btn-primary';
+      modalConfirmBtn.textContent = 'Confirm & Restore';
+    }
+
+    if (typeof restoreDialog.showModal === 'function') {
+      restoreDialog.showModal();
+    } else {
+      restoreDialog.setAttribute('open', '');
+    }
+  });
+});
+
+if (modalConfirmCheckbox) {
+  modalConfirmCheckbox.addEventListener('change', () => {
+    modalConfirmBtn.disabled = !modalConfirmCheckbox.checked;
+  });
+}
+
+if (modalConfirmBtn) {
+  modalConfirmBtn.addEventListener('click', () => {
+    if (pendingRestoreForm) {
+      pendingRestoreForm.dataset.confirmed = 'true';
+      const formToSubmit = pendingRestoreForm;
+      closeRestoreDialog();
+      if (typeof formToSubmit.requestSubmit === 'function') {
+        formToSubmit.requestSubmit();
+      } else {
+        formToSubmit.submit();
+      }
+    }
+  });
+}
 </script>{% endblock %}
