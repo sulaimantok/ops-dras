@@ -1,3 +1,4 @@
+import math
 from flask import Blueprint, render_template, redirect, url_for, flash, session, current_app, request
 
 from app import db
@@ -18,8 +19,14 @@ def index():
 def list_volumes():
     clusters = db.list_clusters()
     cluster_id = request.args.get("cluster_id", type=int)
+    search_q = (request.args.get("q") or "").strip()
+    page = request.args.get("page", 1, type=int)
+    per_page = 15
+
     selected_cluster = None
-    volumes = []
+    paginated_volumes = []
+    total_volumes = 0
+    total_pages = 1
     error = None
 
     if not clusters:
@@ -31,7 +38,25 @@ def list_volumes():
         else:
             try:
                 client = OpenStackClient(selected_cluster, timeout=current_app.config["OPENSTACK_TIMEOUT"])
-                volumes = client.list_volumes()
+                all_volumes = client.list_volumes()
+                if search_q:
+                    q_lower = search_q.lower()
+                    filtered = [
+                        v for v in all_volumes
+                        if q_lower in (v.get("name") or "").lower() or q_lower in (v.get("id") or "").lower()
+                    ]
+                else:
+                    filtered = all_volumes
+
+                total_volumes = len(filtered)
+                total_pages = max(1, math.ceil(total_volumes / per_page))
+                if page < 1:
+                    page = 1
+                elif page > total_pages:
+                    page = total_pages
+
+                start_idx = (page - 1) * per_page
+                paginated_volumes = filtered[start_idx : start_idx + per_page]
             except OpenStackError as exc:
                 error = str(exc)
 
@@ -39,7 +64,11 @@ def list_volumes():
         "volumes.html",
         clusters=clusters,
         selected_cluster=selected_cluster,
-        volumes=volumes,
+        volumes=paginated_volumes,
+        total_volumes=total_volumes,
+        page=page,
+        total_pages=total_pages,
+        search_q=search_q,
         error=error,
     )
 

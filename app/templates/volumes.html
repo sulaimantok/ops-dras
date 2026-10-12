@@ -20,49 +20,81 @@
 
 {% if error %}
   <div class="flash flash-error">{{ error }}</div>
-{% elif selected_cluster and not volumes %}
-  <p class="muted">No volumes found on {{ selected_cluster.name }}.</p>
 {% elif selected_cluster %}
-<div class="table-scroll">
-<table class="data-table">
-  <thead>
-    <tr>
-      <th>Name</th>
-      <th>ID</th>
-      <th>Size (GiB)</th>
-      <th>Status</th>
-      <th>Bootable</th>
-      <th></th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for v in volumes %}
-    <tr>
-      <td>{{ v.name or '(unnamed)' }}</td>
-      <td><code title="{{ v.id }}">{{ v.id[:8] }}&hellip;</code></td>
-      <td>{{ v.size }}</td>
-      <td><span class="badge badge-{{ v.status }}">{{ v.status }}</span></td>
-      <td>{{ v.bootable }}</td>
-      <td>{% if session.get('role') in ('admin', 'operator') %}
-        <form method="post" action="{{ url_for('volumes.backup_volume') }}" class="backup-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="cluster_id" value="{{ selected_cluster.id }}">
-          <input type="hidden" name="volume_id" value="{{ v.id }}">
-          <input type="hidden" name="volume_name" value="{{ v.name or v.id }}">
-          <label class="sr-only" for="backup-mode-{{ v.id }}">Backup type</label>
-          <select name="backup_mode" id="backup-mode-{{ v.id }}" aria-label="Backup type for {{ v.name or v.id }}">
-            <option value="full" selected>Full</option>
-            <option value="incremental">Incremental</option>
-            <option value="automatic">Automatic</option>
-          </select>
-          <button type="submit" class="btn btn-primary">Backup</button>
-        </form>
-        {% else %}<span class="muted">Read only</span>{% endif %}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-</div>
+  <form method="get" class="filter-bar volume-search-bar" aria-label="Volume search filters">
+    <input type="hidden" name="cluster_id" value="{{ selected_cluster.id }}">
+    <input type="search" name="q" value="{{ search_q }}" placeholder="Search volume name or ID..." aria-label="Search volumes">
+    <button class="btn btn-secondary" type="submit">Filter</button>
+    {% if search_q %}
+      <a class="btn btn-secondary" href="{{ url_for('volumes.list_volumes', cluster_id=selected_cluster.id) }}">Reset</a>
+    {% endif %}
+  </form>
+  <div class="section-count muted small" style="margin-top: 10px;">
+    {{ total_volumes }} volume{{ '' if total_volumes == 1 else 's' }} found
+  </div>
+
+  {% if not volumes %}
+    <p class="muted empty-state" style="margin-top: 20px;">
+      {% if search_q %}
+        No volumes matching "{{ search_q }}" on {{ selected_cluster.name }}.
+      {% else %}
+        No volumes found on {{ selected_cluster.name }}.
+      {% endif %}
+    </p>
+  {% else %}
+    <div class="table-scroll" style="margin-top: 14px;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>ID</th>
+          <th>Size (GiB)</th>
+          <th>Status</th>
+          <th>Bootable</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in volumes %}
+        <tr>
+          <td>{{ v.name or '(unnamed)' }}</td>
+          <td><code title="{{ v.id }}">{{ v.id[:8] }}&hellip;</code></td>
+          <td>{{ v.size }}</td>
+          <td><span class="badge badge-{{ v.status }}">{{ v.status }}</span></td>
+          <td>{{ v.bootable }}</td>
+          <td>{% if session.get('role') in ('admin', 'operator') %}
+            <form method="post" action="{{ url_for('volumes.backup_volume') }}" class="backup-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="cluster_id" value="{{ selected_cluster.id }}">
+              <input type="hidden" name="volume_id" value="{{ v.id }}">
+              <input type="hidden" name="volume_name" value="{{ v.name or v.id }}">
+              <label class="sr-only" for="backup-mode-{{ v.id }}">Backup type</label>
+              <select name="backup_mode" id="backup-mode-{{ v.id }}" aria-label="Backup type for {{ v.name or v.id }}">
+                <option value="full" selected>Full</option>
+                <option value="incremental">Incremental</option>
+                <option value="automatic">Automatic</option>
+              </select>
+              <button type="submit" class="btn btn-primary">Backup</button>
+            </form>
+            {% else %}<span class="muted">Read only</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    {% if total_pages > 1 %}
+    <nav class="pagination" aria-label="Volume pages">
+      {% if page > 1 %}
+        <a class="btn btn-secondary" href="{{ url_for('volumes.list_volumes', cluster_id=selected_cluster.id, q=search_q, page=page-1) }}">Previous</a>
+      {% endif %}
+      <span>Page {{ page }} of {{ total_pages }}</span>
+      {% if page < total_pages %}
+        <a class="btn btn-secondary" href="{{ url_for('volumes.list_volumes', cluster_id=selected_cluster.id, q=search_q, page=page+1) }}">Next</a>
+      {% endif %}
+    </nav>
+    {% endif %}
+  {% endif %}
 {% endif %}
 {% endif %}
 {% endblock %}

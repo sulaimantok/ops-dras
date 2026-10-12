@@ -108,6 +108,7 @@ class OpenStackClient:
 
         self._token = resp.headers.get("X-Subject-Token")
         token_data = self._json(resp, url)["token"]
+        self._token_data = token_data
 
         if not self.project_id:
             # Application credentials (and some password setups) are
@@ -123,6 +124,48 @@ class OpenStackClient:
                 f"[{self.name}] no volumev3/block-storage endpoint found in catalog"
             )
         return self._token
+
+    def inspect_connection(self):
+        """
+        Perform a comprehensive connection handshake, measure latency, and inspect
+        Keystone credentials and Cinder endpoint capabilities.
+        """
+        t0 = time.perf_counter()
+        self.authenticate()
+        keystone_ms = max(1, round((time.perf_counter() - t0) * 1000))
+
+        # Probe Cinder endpoint to verify block-storage service connectivity
+        cinder_t0 = time.perf_counter()
+        self._request("GET", "/volumes?limit=1")
+        cinder_ms = max(1, round((time.perf_counter() - cinder_t0) * 1000))
+
+        total_latency_ms = keystone_ms + cinder_ms
+
+        catalog_services = []
+        token_info = getattr(self, "_token_data", {})
+        if token_info:
+            for s in token_info.get("catalog", []):
+                stype = s.get("type")
+                if stype and stype not in catalog_services:
+                    catalog_services.append(stype)
+
+        project_info = token_info.get("project") or {}
+        user_info = token_info.get("user") or {}
+
+        return {
+            "ok": True,
+            "latency_ms": total_latency_ms,
+            "keystone_latency_ms": keystone_ms,
+            "cinder_latency_ms": cinder_ms,
+            "project_id": project_info.get("id") or self.project_id,
+            "project_name": project_info.get("name") or self.project_name or "-",
+            "user_name": user_info.get("name") or self.username or "-",
+            "cinder_endpoint": self._cinder_endpoint,
+            "region": self.region or "Default",
+            "auth_method": self.auth_method,
+            "expires_at": token_info.get("expires_at", "-"),
+            "catalog_services": catalog_services,
+        }
 
     def _pick_endpoint(self, catalog):
         # Preference order matters: some clusters keep a stale/legacy

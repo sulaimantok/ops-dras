@@ -53,3 +53,40 @@ def test_create_incremental_backup_sends_incremental_flag(request):
 
     assert result["id"] == "backup-1"
     assert request.call_args.kwargs["json"]["backup"]["incremental"] is True
+
+
+@patch("app.services.openstack.requests.request")
+@patch("app.services.openstack.requests.post")
+def test_inspect_connection_returns_detailed_metadata(post, request):
+    auth_resp = Mock(status_code=201)
+    auth_resp.headers = {"X-Subject-Token": "test-token"}
+    auth_resp.json.return_value = {
+        "token": {
+            "project": {"id": "proj-123", "name": "production"},
+            "user": {"id": "user-456", "name": "admin-user"},
+            "expires_at": "2026-10-12T18:00:00Z",
+            "catalog": [
+                {
+                    "type": "block-storage",
+                    "endpoints": [{"interface": "public", "url": "https://cinder.example/v3", "region": "RegionOne"}],
+                }
+            ],
+        }
+    }
+    auth_resp.url = "https://keystone.example/v3/auth/tokens"
+    post.return_value = auth_resp
+
+    cinder_resp = Mock(status_code=200)
+    cinder_resp.json.return_value = {"volumes": []}
+    cinder_resp.url = "https://cinder.example/v3/proj-123/volumes?limit=1"
+    request.return_value = cinder_resp
+
+    client = OpenStackClient(config())
+    details = client.inspect_connection()
+
+    assert details["ok"] is True
+    assert details["project_id"] == "proj-123"
+    assert details["project_name"] == "production"
+    assert details["cinder_endpoint"] == "https://cinder.example/v3"
+    assert "block-storage" in details["catalog_services"]
+    assert details["latency_ms"] >= 1

@@ -103,6 +103,7 @@
 <ul class="cluster-list">
   {% for c in clusters %}
   {% set method = c.auth_method or 'password' %}
+  {% set tr = test_results.get(c.id|string) %}
   <li>
     <details class="cluster-item" id="cluster-{{ c.id }}">
       <summary class="cluster-summary">
@@ -111,10 +112,61 @@
           <span class="cluster-url">{{ c.auth_url or '(no auth URL set)' }}</span>
         </span>
         <span class="cluster-summary-meta">
+          {% if tr %}
+            <span class="badge {{ 'badge-available' if tr.ok else 'badge-error' }}">{{ 'ONLINE (' ~ tr.latency_ms ~ 'ms)' if tr.ok else 'FAILED' }}</span>
+          {% else %}
+            <span class="badge badge-type">Untested</span>
+          {% endif %}
           <span class="badge badge-auth">{{ 'Application Credential' if method == 'application_credential' else 'Username & Password' }}</span>
           <span class="muted">{{ c.region or 'RegionOne' }}</span>
         </span>
       </summary>
+
+      <div class="cluster-quick-bar" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--border); background: var(--panel-2); flex-wrap: wrap; gap: 10px;">
+        <div>
+          <strong>Connection Health &amp; Discovery</strong>
+          <span class="muted small" style="display: block; margin-top: 2px;">
+            {% if tr %}
+              Last checked: {{ 'ONLINE (' ~ tr.latency_ms ~ 'ms)' if tr.ok else 'FAILED' }}
+            {% else %}
+              Not tested in this session.
+            {% endif %}
+          </span>
+        </div>
+        {% if session.get('role') in ('admin', 'operator') %}
+        <form method="post" action="{{ url_for('clusters.test_connection', cluster_id=c.id) }}" style="margin: 0;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-secondary" style="padding: 6px 14px; font-size: 0.84rem;">
+            ⚡ Run Test Connection
+          </button>
+        </form>
+        {% endif %}
+      </div>
+
+      {% if tr %}
+      <div style="padding: 0 18px;">
+        <div class="test-result-box {{ 'test-success' if tr.ok else 'test-error' }}">
+          <div class="test-result-header">
+            <strong>Connectivity: <span class="badge {{ 'badge-available' if tr.ok else 'badge-error' }}">{{ 'ONLINE (' ~ tr.latency_ms ~ 'ms)' if tr.ok else 'FAILED' }}</span></strong>
+            <span class="muted small">{{ 'Keystone ' ~ tr.keystone_latency_ms ~ 'ms · Cinder ' ~ tr.cinder_latency_ms ~ 'ms' if tr.ok else (tr.code or 'Error') }}</span>
+          </div>
+          {% if tr.ok %}
+          <div class="test-result-grid">
+            <div><dt>Project ID</dt><dd><code>{{ tr.project_id }}</code></dd></div>
+            <div><dt>Project Name</dt><dd>{{ tr.project_name }}</dd></div>
+            <div><dt>Cinder Endpoint</dt><dd><code>{{ tr.cinder_endpoint }}</code></dd></div>
+            <div><dt>Region / Auth</dt><dd>{{ tr.region }} ({{ tr.auth_method }})</dd></div>
+            {% if tr.catalog_services %}<div><dt>Catalog Services</dt><dd>{{ tr.catalog_services|join(', ') }}</dd></div>{% endif %}
+          </div>
+          {% else %}
+          <div class="task-error" style="margin-top: 6px;">
+            <p><strong>{{ tr.code or 'openstack_error' }}</strong>: {{ tr.error }}</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
       {% if session.get('role') == 'admin' %}<form method="post" action="{{ url_for('clusters.update_cluster', cluster_id=c.id) }}" class="cluster-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {{ cluster_fields(c) }}
@@ -128,7 +180,14 @@
             Delete
           </button>
         </div>
-      </form>{% else %}<div class="cluster-form"><p class="muted">Cluster configuration is read-only for your role.</p></div>{% endif %}
+      </form>{% elif session.get('role') == 'operator' %}<div class="cluster-form">
+        <form method="post" action="{{ url_for('clusters.test_connection', cluster_id=c.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="settings-actions">
+            <button type="submit" class="btn btn-secondary">Test connection</button>
+          </div>
+        </form>
+      </div>{% else %}<div class="cluster-form"><p class="muted">Cluster configuration is read-only for your role.</p></div>{% endif %}
     </details>
   </li>
   {% endfor %}
