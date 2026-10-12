@@ -157,7 +157,7 @@ class OpenStackClient:
             "latency_ms": total_latency_ms,
             "keystone_latency_ms": keystone_ms,
             "cinder_latency_ms": cinder_ms,
-            "project_id": self.project_id,
+            "project_id": project_info.get("id") or self.project_id,
             "project_name": project_info.get("name") or self.project_name or "-",
             "user_name": user_info.get("name") or self.username or "-",
             "cinder_endpoint": self._cinder_endpoint,
